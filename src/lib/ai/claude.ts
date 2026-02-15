@@ -200,14 +200,15 @@ async function trackUsage(userId: string, feature: string, tokens: number) {
     .single();
 
   if (existing) {
-    const currentVal = (existing as Record<string, number>)[feature] || 0;
+    const existingUsage = existing as unknown as { id: string; total_tokens_used: number | null } & Record<string, number | null>;
+    const currentVal = existingUsage[feature] || 0;
     await supabase
       .from("ai_usage")
       .update({
         [feature]: currentVal + 1,
-        total_tokens_used: (existing.total_tokens_used || 0) + tokens,
+        total_tokens_used: (existingUsage.total_tokens_used || 0) + tokens,
       })
-      .eq("id", existing.id);
+      .eq("id", existingUsage.id);
   } else {
     await supabase.from("ai_usage").insert({
       user_id: userId,
