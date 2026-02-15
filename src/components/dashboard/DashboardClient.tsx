@@ -5,6 +5,7 @@ import { Profile, DashboardStats, CEFRLevel } from "@/types";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import StreakCalendar from "./StreakCalendar";
 
 const LEVELS: CEFRLevel[] = ["A0", "A1", "A2", "B1", "B2"];
 
@@ -21,9 +22,11 @@ interface AIAnalysis {
 
 export default function DashboardClient({
   profile,
+  userId,
   stats,
 }: {
   profile: Profile;
+  userId: string;
   stats: DashboardStats;
 }) {
   const router = useRouter();
@@ -177,6 +180,35 @@ export default function DashboardClient({
             {Math.min(stats.dueCount + 4, 10)} cards
           </span>
         </Link>
+
+        {/* Quick Nav */}
+        <div className="grid grid-cols-2 gap-3 mb-6 animate-fade-up-delay">
+          <Link
+            href="/words"
+            className="bg-brand-surface border border-brand-border rounded-2xl p-4 hover:border-brand-accent/30 transition-all flex items-center gap-3"
+          >
+            <span className="text-2xl">📚</span>
+            <div>
+              <div className="font-bold text-sm">Word Bank</div>
+              <div className="text-[10px] text-brand-dim">Browse all vocabulary</div>
+            </div>
+          </Link>
+          <Link
+            href="/study"
+            className="bg-brand-surface border border-brand-border rounded-2xl p-4 hover:border-brand-accent/30 transition-all flex items-center gap-3"
+          >
+            <span className="text-2xl">🔊</span>
+            <div>
+              <div className="font-bold text-sm">Practice</div>
+              <div className="text-[10px] text-brand-dim">Review with audio</div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Streak Calendar */}
+        <div className="mb-6 animate-fade-up-delay">
+          <StreakCalendar userId={userId} />
+        </div>
 
         {/* AI Coach — POWERED BY CLAUDE */}
         <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 animate-fade-up-delay">

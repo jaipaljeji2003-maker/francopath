@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { calculateSRS } from "@/lib/srs/sm2";
+import { usePronounce } from "@/hooks/usePronounce";
 import type { TranslationLang } from "@/types";
 
 interface MnemonicData {
@@ -59,6 +60,7 @@ export default function StudyClient({
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(null);
   const router = useRouter();
   const supabase = createClient();
+  const { speak } = usePronounce();
 
   // Fetch AI mnemonic for current card
   const fetchMnemonic = useCallback(async () => {
@@ -194,15 +196,24 @@ export default function StudyClient({
       // End session
       if (sessionId) {
         const duration = Math.round((Date.now() - sessionStats.started) / 1000);
+        const finalCorrect = sessionStats.correct + (isCorrect ? 1 : 0);
+        const finalTotal = sessionStats.total + 1;
         await supabase
           .from("study_sessions")
           .update({
             ended_at: new Date().toISOString(),
-            cards_reviewed: sessionStats.total + 1,
-            cards_correct: sessionStats.correct + (isCorrect ? 1 : 0),
+            cards_reviewed: finalTotal,
+            cards_correct: finalCorrect,
             duration_seconds: duration,
           })
           .eq("id", sessionId);
+
+        // Update streak
+        fetch("/api/user/streak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cardsReviewed: finalTotal, cardsCorrect: finalCorrect, durationSeconds: duration }),
+        }).catch(() => {});
       }
       setAnimating(false);
       setSessionStats((prev) => ({ ...prev, total: prev.total })); // trigger re-render
@@ -347,7 +358,16 @@ export default function StudyClient({
           </div>
 
           {/* French word */}
-          <div className="text-4xl font-black tracking-tight mb-2">{card.word.french}</div>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <div className="text-4xl font-black tracking-tight">{card.word.french}</div>
+            <button
+              onClick={(e) => { e.stopPropagation(); speak(card.word.french); }}
+              className="w-9 h-9 rounded-full bg-brand-accent/10 flex items-center justify-center text-lg hover:bg-brand-accent/20 transition-colors shrink-0"
+              title="Listen to pronunciation"
+            >
+              🔊
+            </button>
+          </div>
           <div className="text-sm text-brand-dim italic">
             {card.word.part_of_speech}
             {card.word.gender && ` (${card.word.gender})`}
@@ -381,8 +401,17 @@ export default function StudyClient({
 
               {/* Example */}
               {card.word.example_sentence && (
-                <div className="bg-brand-accent/5 border border-brand-border rounded-xl px-4 py-3 text-sm text-brand-muted italic">
-                  &ldquo;{card.word.example_sentence}&rdquo;
+                <div className="bg-brand-accent/5 border border-brand-border rounded-xl px-4 py-3 flex items-center gap-2">
+                  <span className="text-sm text-brand-muted italic flex-1">
+                    &ldquo;{card.word.example_sentence}&rdquo;
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); speak(card.word.example_sentence!); }}
+                    className="text-sm hover:scale-110 transition-transform shrink-0"
+                    title="Listen"
+                  >
+                    🔊
+                  </button>
                 </div>
               )}
 
