@@ -92,10 +92,14 @@ export default function StudyClient({
       if (data.error) {
         setMnemonic({ mnemonic: "", error: data.error });
       } else {
+        const mnemonicPayload =
+          data.mnemonic && typeof data.mnemonic === "object" ? data.mnemonic : data;
+
         setMnemonic({
-          mnemonic: data.mnemonic,
-          bridge_language: data.bridge_language,
-          sound_bridge: data.sound_bridge,
+          mnemonic:
+            typeof mnemonicPayload.mnemonic === "string" ? mnemonicPayload.mnemonic : "",
+          bridge_language: mnemonicPayload.bridge_language,
+          sound_bridge: mnemonicPayload.sound_bridge,
         });
       }
     } catch {
