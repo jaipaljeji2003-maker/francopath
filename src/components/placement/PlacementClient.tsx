@@ -18,6 +18,7 @@ export default function PlacementClient({ userId, userName }: Props) {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Array<{ selected: number; correct: boolean; time_ms: number }>>([]);
   const [result, setResult] = useState<{ level: CEFRLevel; score: number } | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<{ encouragement?: string; strengths?: string[]; weaknesses?: string[]; first_week_focus?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [startTime, setStartTime] = useState(Date.now());
   const router = useRouter();
@@ -53,6 +54,21 @@ export default function PlacementClient({ userId, userName }: Props) {
 
       setResult({ level, score });
       setStep("result");
+
+      // Fire AI analysis in background
+      fetch("/api/ai/placement-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          score,
+          total: placementQuestions.length,
+          answers: newAnswers.map((a, i) => ({ question_index: i, ...a })),
+          determinedLevel: level,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => { if (data.analysis) setAiAnalysis(data.analysis); })
+        .catch(() => {});
     }
   };
 
@@ -266,6 +282,40 @@ export default function PlacementClient({ userId, userName }: Props) {
             {result.level === "B1" && "Solid skills! Let's push toward advanced proficiency."}
             {result.level === "B2" && "Impressive! You're ready for advanced content and exam prep."}
           </p>
+
+          {/* AI Analysis */}
+          {aiAnalysis && (
+            <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 text-left mb-6 animate-fade-up">
+              <div className="flex items-center gap-2 mb-3">
+                <span>🤖</span>
+                <span className="font-bold text-xs">AI Coach Analysis</span>
+              </div>
+              {aiAnalysis.encouragement && (
+                <p className="text-sm text-brand-muted mb-3">{aiAnalysis.encouragement}</p>
+              )}
+              {aiAnalysis.strengths && aiAnalysis.strengths.length > 0 && (
+                <div className="mb-2">
+                  <span className="text-[10px] text-brand-success font-semibold uppercase tracking-wider">Strengths: </span>
+                  <span className="text-xs text-brand-muted">{aiAnalysis.strengths.join(", ")}</span>
+                </div>
+              )}
+              {aiAnalysis.weaknesses && aiAnalysis.weaknesses.length > 0 && (
+                <div className="mb-2">
+                  <span className="text-[10px] text-brand-warning font-semibold uppercase tracking-wider">To improve: </span>
+                  <span className="text-xs text-brand-muted">{aiAnalysis.weaknesses.join(", ")}</span>
+                </div>
+              )}
+              {aiAnalysis.first_week_focus && (
+                <div className="bg-brand-accent/5 rounded-lg px-3 py-2 mt-2">
+                  <span className="text-[10px] text-brand-accent font-semibold">📌 First week: </span>
+                  <span className="text-xs text-brand-muted">{aiAnalysis.first_week_focus}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {!aiAnalysis && result.score > 0 && (
+            <div className="text-xs text-brand-dim mb-6 animate-pulse">🧠 AI is analyzing your results...</div>
+          )}
 
           <button
             onClick={handleFinishOnboarding}

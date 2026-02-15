@@ -6,6 +6,14 @@ import { createClient } from "@/lib/supabase/client";
 import { calculateSRS } from "@/lib/srs/sm2";
 import type { TranslationLang } from "@/types";
 
+interface MnemonicData {
+  mnemonic: string;
+  bridge_language?: string;
+  sound_bridge?: string;
+  loading?: boolean;
+  error?: string;
+}
+
 interface CardWithWord {
   id: string;
   word_id: string;
@@ -48,8 +56,52 @@ export default function StudyClient({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [animating, setAnimating] = useState(false);
   const [showLang, setShowLang] = useState<TranslationLang>(preferredLang);
+  const [mnemonic, setMnemonic] = useState<MnemonicData | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  // Fetch AI mnemonic for current card
+  const fetchMnemonic = useCallback(async () => {
+    if (!cards[currentIndex]) return;
+    const card = cards[currentIndex];
+
+    // Already have a mnemonic from DB
+    if (card.ai_mnemonic) {
+      setMnemonic({ mnemonic: card.ai_mnemonic });
+      return;
+    }
+
+    setMnemonic({ mnemonic: "", loading: true });
+
+    try {
+      const res = await fetch("/api/ai/mnemonic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wordId: card.word_id,
+          french: card.word.french,
+          english: card.word.english,
+          hindi: card.word.hindi,
+          punjabi: card.word.punjabi,
+          partOfSpeech: card.word.part_of_speech,
+          level: card.word.cefr_level,
+          example: card.word.example_sentence,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setMnemonic({ mnemonic: "", error: data.error });
+      } else {
+        setMnemonic({
+          mnemonic: data.mnemonic,
+          bridge_language: data.bridge_language,
+          sound_bridge: data.sound_bridge,
+        });
+      }
+    } catch {
+      setMnemonic({ mnemonic: "", error: "Couldn't load mnemonic" });
+    }
+  }, [currentIndex, cards]);
 
   // Create session on mount
   useEffect(() => {
@@ -132,6 +184,7 @@ export default function StudyClient({
         setCurrentIndex((prev) => prev + 1);
         setShowAnswer(false);
         setAnimating(false);
+        setMnemonic(null);
       }, 200);
     } else {
       // End session
@@ -339,6 +392,33 @@ export default function StudyClient({
               {/* Notes */}
               {card.word.notes && (
                 <div className="mt-2 text-xs text-brand-dim">💡 {card.word.notes}</div>
+              )}
+
+              {/* AI Mnemonic */}
+              {mnemonic?.mnemonic ? (
+                <div className="mt-3 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3 text-left">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs">🤖</span>
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">AI Memory Trick</span>
+                    {mnemonic.bridge_language && mnemonic.bridge_language !== "none" && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300">
+                        {mnemonic.bridge_language === "punjabi" ? "ਪੰਜਾਬੀ bridge" : mnemonic.bridge_language === "hindi" ? "हिन्दी bridge" : "EN bridge"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-brand-muted leading-relaxed">{mnemonic.mnemonic}</p>
+                </div>
+              ) : mnemonic?.loading ? (
+                <div className="mt-3 text-xs text-brand-dim animate-pulse text-center">🤖 Generating memory trick...</div>
+              ) : mnemonic?.error ? (
+                <div className="mt-3 text-xs text-brand-dim text-center">{mnemonic.error}</div>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); fetchMnemonic(); }}
+                  className="mt-3 mx-auto block text-xs px-4 py-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 transition-colors"
+                >
+                  🤖 Generate Memory Trick
+                </button>
               )}
             </div>
           )}
