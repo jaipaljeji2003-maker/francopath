@@ -68,7 +68,10 @@ export async function POST(req: NextRequest) {
   // Simple streak calc
   let streak = 0;
   if (sessions && sessions.length > 0) {
-    const dates = [...new Set(sessions.map(s => s.started_at.split("T")[0]))];
+    const seen: Record<string, true> = {};
+    const dates = sessions
+      .map((s) => s.started_at.split("T")[0])
+      .filter((d) => (seen[d] ? false : (seen[d] = true)));
     const todayDate = new Date();
     for (let i = 0; i < dates.length; i++) {
       const expected = new Date(todayDate);
