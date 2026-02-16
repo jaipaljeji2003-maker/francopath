@@ -182,7 +182,7 @@ export default function DashboardClient({
         </Link>
 
         {/* Quick Nav */}
-        <div className="grid grid-cols-2 gap-3 mb-6 animate-fade-up-delay">
+        <div className="grid grid-cols-3 gap-3 mb-6 animate-fade-up-delay">
           <Link
             href="/words"
             className="bg-brand-surface border border-brand-border rounded-2xl p-4 hover:border-brand-accent/30 transition-all flex items-center gap-3"
@@ -190,7 +190,17 @@ export default function DashboardClient({
             <span className="text-2xl">📚</span>
             <div>
               <div className="font-bold text-sm">Word Bank</div>
-              <div className="text-[10px] text-brand-dim">Browse all vocabulary</div>
+              <div className="text-[10px] text-brand-dim">Browse vocabulary</div>
+            </div>
+          </Link>
+          <Link
+            href="/listen"
+            className="bg-brand-surface border border-brand-border rounded-2xl p-4 hover:border-brand-accent/30 transition-all flex items-center gap-3"
+          >
+            <span className="text-2xl">🎧</span>
+            <div>
+              <div className="font-bold text-sm">Listening</div>
+              <div className="text-[10px] text-brand-dim">Audio practice</div>
             </div>
           </Link>
           <Link
@@ -200,7 +210,7 @@ export default function DashboardClient({
             <span className="text-2xl">🔊</span>
             <div>
               <div className="font-bold text-sm">Practice</div>
-              <div className="text-[10px] text-brand-dim">Review with audio</div>
+              <div className="text-[10px] text-brand-dim">Review cards</div>
             </div>
           </Link>
         </div>

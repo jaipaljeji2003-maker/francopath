@@ -375,3 +375,56 @@ Respond ONLY with this JSON (no markdown, no backticks):
   "encouragement": "Motivating message with timeline estimate"
 }`;
 }
+
+/**
+ * Generate listening comprehension drill
+ * Uses browser TTS to read the passage aloud — AI generates the text + questions
+ */
+export function listeningDrillPrompt(params: {
+  examType: "TCF" | "TEF";
+  level: string;
+  scenario: string;
+}) {
+  const scenarioTypes: Record<string, string> = {
+    announcement: "A public announcement (train station, airport, store, school)",
+    conversation: "A conversation between two people (friends, coworkers, strangers)",
+    voicemail: "A voicemail or phone message",
+    news: "A short radio news bulletin",
+    instruction: "Instructions or directions (recipe, assembly, navigation)",
+  };
+
+  return `Generate a ${params.examType} listening comprehension exercise at CEFR ${params.level} level.
+
+Scenario type: ${scenarioTypes[params.scenario] || params.scenario}
+
+Create a realistic audio transcript with questions. The text will be read aloud by text-to-speech.
+
+Rules:
+- Transcript should be 40-80 words for A2, 60-120 for B1, 100-160 for B2
+- Use natural spoken French (contractions, filler words for higher levels)
+- Include 3-4 multiple-choice questions testing: main idea, specific details, speaker intent
+- Questions should be in French with English translations
+- Match real ${params.examType} compréhension orale style
+
+Respond ONLY with this JSON (no markdown, no backticks):
+{
+  "scenario_type": "${params.scenario}",
+  "scenario_description": "Brief context in English (e.g., 'At a train station')",
+  "transcript": "French text to be read aloud",
+  "transcript_translation": "English translation",
+  "play_speed": 0.85,
+  "questions": [
+    {
+      "question": "French question",
+      "question_en": "English translation",
+      "options": ["A", "B", "C", "D"],
+      "correct_index": 0,
+      "explanation": "Bilingual explanation"
+    }
+  ],
+  "key_vocabulary": [
+    {"french": "word", "english": "translation", "context_tip": "how it's used here"}
+  ],
+  "listening_tip": "Strategy tip for this type of listening exercise"
+}`;
+}

@@ -224,6 +224,11 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {/* Dev Panel link — hidden at bottom */}
+        <Link href="/dev" className="block text-center py-3 text-[10px] text-brand-border hover:text-brand-dim transition-colors">
+          🛠
+        </Link>
       </div>
     </div>
   );

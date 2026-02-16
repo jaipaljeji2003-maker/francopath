@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import FeedbackWidget from "@/components/shared/FeedbackWidget";
 
 export const metadata: Metadata = {
   title: "FrancoPath — AI-Powered French for TCF & TEF",
@@ -28,7 +29,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <FeedbackWidget />
+      </body>
     </html>
   );
 }
