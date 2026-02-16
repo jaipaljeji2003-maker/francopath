@@ -34,7 +34,20 @@ export default function WordBrowserClient({ words, cardMap, userLevel, preferred
   const [showLang, setShowLang] = useState<TranslationLang>(preferredLang);
 
   const categories = useMemo(
-    () => [...new Set(words.map((w) => w.category))].sort(),
+    () => {
+      const seen: Record<string, true> = {};
+      const uniqueCategories: string[] = [];
+
+      for (const word of words) {
+        const category = word.category;
+        if (!seen[category]) {
+          seen[category] = true;
+          uniqueCategories.push(category);
+        }
+      }
+
+      return uniqueCategories.sort();
+    },
     [words]
   );
 
