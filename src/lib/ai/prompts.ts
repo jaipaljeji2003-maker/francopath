@@ -182,3 +182,196 @@ Respond ONLY with this JSON (no markdown, no backticks):
   "exam_style": {"french": "...", "english": "..."}
 }`;
 }
+
+// ═══════════════════════════════════════════════════
+// PHASE 4: EXAM PREP PROMPTS
+// ═══════════════════════════════════════════════════
+
+/**
+ * Generate TCF/TEF comprehension drill
+ */
+export function comprehensionDrillPrompt(params: {
+  examType: "TCF" | "TEF";
+  level: string;
+  category: string;
+  nativeLanguages: string[];
+}) {
+  return `Generate a ${params.examType} ${params.category} comprehension exercise at CEFR ${params.level} level.
+
+The student speaks: ${params.nativeLanguages.join(", ")}
+
+Create a realistic exam-style passage with questions.
+
+Rules:
+- Passage should be 60-120 words for B1, 100-180 words for B2
+- Include 4 multiple-choice questions with 4 options each
+- Questions should test: main idea, specific detail, inference, vocabulary in context
+- Match the style and difficulty of real ${params.examType} exams
+- Include tricky distractors that mirror real exam traps
+
+Respond ONLY with this JSON (no markdown, no backticks):
+{
+  "passage": "French text here",
+  "passage_translation": "English translation",
+  "questions": [
+    {
+      "question": "French question",
+      "question_en": "English translation of question",
+      "options": ["A", "B", "C", "D"],
+      "correct_index": 0,
+      "explanation": "Why this is correct (bilingual)"
+    }
+  ],
+  "exam_tip": "Brief exam strategy tip for this type of question"
+}`;
+}
+
+/**
+ * Generate writing practice prompt
+ */
+export function writingPrompt(params: {
+  examType: "TCF" | "TEF";
+  level: string;
+  taskType: "formal_letter" | "opinion_essay" | "report" | "complaint";
+}) {
+  const taskDescriptions: Record<string, string> = {
+    formal_letter: "Write a formal letter (150-200 words). Context: responding to a job posting, requesting information, or making a formal complaint.",
+    opinion_essay: "Write an opinion essay (200-250 words). Take a clear position and support it with arguments.",
+    report: "Write a report (150-200 words). Summarize data or describe a situation with recommendations.",
+    complaint: "Write a formal complaint letter (150-200 words). Describe the problem and request a specific resolution.",
+  };
+
+  return `Generate a ${params.examType} writing task (Expression écrite) at CEFR ${params.level} level.
+
+Task type: ${params.taskType}
+Description: ${taskDescriptions[params.taskType]}
+
+Create a realistic exam prompt that a student would need to respond to.
+
+Respond ONLY with this JSON (no markdown, no backticks):
+{
+  "task_title": "Brief title",
+  "scenario": "The exam scenario/prompt in French (2-4 sentences)",
+  "scenario_en": "English translation",
+  "requirements": ["requirement 1", "requirement 2", "requirement 3"],
+  "requirements_en": ["English requirement 1", "English requirement 2"],
+  "word_count_min": 150,
+  "word_count_max": 200,
+  "time_limit_minutes": 30,
+  "grading_criteria": ["criterion 1", "criterion 2", "criterion 3", "criterion 4"],
+  "useful_vocabulary": ["word1", "word2", "word3", "word4", "word5"],
+  "useful_expressions": ["expression1", "expression2", "expression3"]
+}`;
+}
+
+/**
+ * Grade a writing submission
+ */
+export function writingGradePrompt(params: {
+  examType: "TCF" | "TEF";
+  level: string;
+  task: string;
+  submission: string;
+  nativeLanguages: string[];
+}) {
+  return `Grade this ${params.examType} writing submission at CEFR ${params.level} level.
+
+Task: ${params.task}
+
+Student's submission:
+"""
+${params.submission}
+"""
+
+Student speaks: ${params.nativeLanguages.join(", ")}
+
+Grade on TCF/TEF criteria:
+
+Respond ONLY with this JSON (no markdown, no backticks):
+{
+  "overall_score": 14,
+  "max_score": 20,
+  "band": "B1+",
+  "criteria_scores": {
+    "task_completion": {"score": 4, "max": 5, "comment": "..."},
+    "coherence": {"score": 3, "max": 5, "comment": "..."},
+    "vocabulary": {"score": 4, "max": 5, "comment": "..."},
+    "grammar": {"score": 3, "max": 5, "comment": "..."}
+  },
+  "strengths": ["strength 1", "strength 2"],
+  "errors": [
+    {"original": "error text", "correction": "corrected text", "rule": "grammar rule"}
+  ],
+  "improved_version": "A model answer showing improvements",
+  "study_tips": ["tip for improvement 1", "tip 2"],
+  "native_language_tip": "Tip leveraging their Hindi/Punjabi knowledge"
+}`;
+}
+
+/**
+ * Generate vocabulary-in-context drill (common TCF/TEF format)
+ */
+export function vocabDrillPrompt(params: {
+  examType: "TCF" | "TEF";
+  level: string;
+  focusArea: string;
+}) {
+  return `Generate a ${params.examType} vocabulary-in-context drill at CEFR ${params.level} level.
+Focus area: ${params.focusArea}
+
+Create 5 fill-in-the-blank sentences where the student must choose the correct word.
+
+Respond ONLY with this JSON (no markdown, no backticks):
+{
+  "focus": "${params.focusArea}",
+  "questions": [
+    {
+      "sentence": "French sentence with _____ blank",
+      "sentence_en": "English translation",
+      "options": ["word1", "word2", "word3", "word4"],
+      "correct_index": 0,
+      "explanation": "Why this word fits (brief)"
+    }
+  ],
+  "exam_tip": "Strategy for vocabulary-in-context questions"
+}`;
+}
+
+/**
+ * Mock exam score prediction
+ */
+export function scorePredictionPrompt(params: {
+  examType: "TCF" | "TEF";
+  drillHistory: Array<{ type: string; score: number; maxScore: number }>;
+  accuracy: number;
+  level: string;
+  masteredWords: number;
+  totalWords: number;
+  weakAreas: string[];
+}) {
+  return `Predict this student's ${params.examType} exam performance.
+
+Current level: ${params.level}
+Overall accuracy: ${params.accuracy}%
+Vocabulary mastered: ${params.masteredWords}/${params.totalWords}
+Weak areas: ${params.weakAreas.join(", ") || "none identified"}
+
+Drill history:
+${params.drillHistory.map(d => `  ${d.type}: ${d.score}/${d.maxScore}`).join("\n")}
+
+Respond ONLY with this JSON (no markdown, no backticks):
+{
+  "predicted_level": "B1",
+  "predicted_score_range": "350-400",
+  "confidence": 72,
+  "section_predictions": {
+    "comprehension_orale": {"predicted": "B1", "readiness_pct": 65},
+    "comprehension_ecrite": {"predicted": "B1+", "readiness_pct": 70},
+    "expression_ecrite": {"predicted": "A2+", "readiness_pct": 55},
+    "expression_orale": {"predicted": "A2", "readiness_pct": 45}
+  },
+  "days_to_ready": 45,
+  "priority_actions": ["action 1", "action 2", "action 3"],
+  "encouragement": "Motivating message with timeline estimate"
+}`;
+}
