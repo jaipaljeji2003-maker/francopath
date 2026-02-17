@@ -32,6 +32,32 @@ type StudyCard = {
   };
 };
 
+const LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
+const DEFAULT_DAILY_GOAL = 20;
+const DEFAULT_SESSION_LIMIT = 25;
+const MIN_GOAL = 5;
+const MAX_GOAL = 100;
+const UNLIMITED_SENTINEL = 999;
+
+function clamp(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const normalized = Math.trunc(parsed);
+  return Math.max(min, Math.min(max, normalized));
+}
+
+function oneLevelBelow(level: string): string | undefined {
+  const index = LEVELS.indexOf(level as (typeof LEVELS)[number]);
+  if (index <= 0) return undefined;
+  return LEVELS[index - 1];
+}
+
+function getAllowedLevels(currentLevel: string): string[] {
+  const primary = LEVELS.includes(currentLevel as (typeof LEVELS)[number]) ? currentLevel : "A1";
+  const support = oneLevelBelow(primary);
+  return support ? [primary, support] : [primary];
+}
+
 function hasFocusTag(card: StudyCard, tags: string[]): boolean {
   const category = card.word.category.toLowerCase();
   const subcategory = card.word.subcategory?.toLowerCase() || "";
@@ -108,8 +134,16 @@ export default async function StudyPage() {
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   if (!profile?.onboarding_complete) redirect("/placement");
 
-  const dailyGoal = profile.daily_goal || 10;
+  const dailyGoal = clamp(profile.daily_goal, MIN_GOAL, MAX_GOAL, DEFAULT_DAILY_GOAL);
+  const rawSessionLimit = profile.session_limit;
+  const sessionLimit =
+    rawSessionLimit === UNLIMITED_SENTINEL
+      ? Number.POSITIVE_INFINITY
+      : rawSessionLimit == null
+        ? dailyGoal
+        : clamp(rawSessionLimit, MIN_GOAL, MAX_GOAL, DEFAULT_SESSION_LIMIT);
   const now = new Date().toISOString();
+  const allowedLevels = getAllowedLevels(profile.current_level || "A1");
 
   const { plan } = await getDeckPlanForUser({
     supabase,
@@ -129,10 +163,12 @@ export default async function StudyPage() {
     .neq("status", "burned")
     .order("next_review", { ascending: true })
     .order("word_id", { ascending: true })
-    .limit(dailyGoal * 4);
+    .limit(Number.isFinite(sessionLimit) ? sessionLimit * 4 : MAX_GOAL * 20);
+
+  const eligibleDueCards = ((dueCards || []) as StudyCard[]).filter((card) => allowedLevels.includes(card.word.cefr_level));
 
   const pickedReviews = pickWithSupportCap({
-    cards: (dueCards || []) as StudyCard[],
+    cards: eligibleDueCards,
     quota: reviewQuota,
     plan,
     type: "review",
@@ -148,12 +184,14 @@ export default async function StudyPage() {
     .neq("status", "burned")
     .order("created_at", { ascending: true })
     .order("word_id", { ascending: true })
-    .limit(dailyGoal * 4);
+    .limit(Number.isFinite(sessionLimit) ? sessionLimit * 4 : MAX_GOAL * 20);
 
-  const eligibleNew = ((newCards || []) as StudyCard[]).filter((card) => !pickedReviewIds.has(card.id));
+  const eligibleNew = ((newCards || []) as StudyCard[]).filter(
+    (card) => !pickedReviewIds.has(card.id) && allowedLevels.includes(card.word.cefr_level),
+  );
   const pickedNew = pickWithSupportCap({ cards: eligibleNew, quota: newQuota, plan, type: "new" });
 
-  const queue = [...pickedReviews, ...pickedNew].slice(0, dailyGoal);
+  const queue = [...pickedReviews, ...pickedNew].slice(0, sessionLimit);
 
   return (
     <StudyClient

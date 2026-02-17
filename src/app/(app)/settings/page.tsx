@@ -5,6 +5,18 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 
+const MIN_GOAL = 5;
+const MAX_GOAL = 100;
+const DEFAULT_DAILY_GOAL = 20;
+const UNLIMITED_SENTINEL = 999;
+
+function clamp(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const normalized = Math.trunc(parsed);
+  return Math.max(min, Math.min(max, normalized));
+}
+
 export default function SettingsPage() {
   const [profile, setProfile] = useState<any>(null);
   const [saving, setSaving] = useState(false);
@@ -24,9 +36,15 @@ export default function SettingsPage() {
   const updateField = async (field: string, value: any) => {
     setSaving(true);
     setMessage(null);
-    const { error } = await supabase.from("profiles").update({ [field]: value }).eq("id", profile.id);
+    let normalized = value;
+    if (field === "daily_goal") normalized = clamp(value, MIN_GOAL, MAX_GOAL, DEFAULT_DAILY_GOAL);
+    if (field === "session_limit" && value !== null && value !== UNLIMITED_SENTINEL) {
+      normalized = clamp(value, MIN_GOAL, MAX_GOAL, 25);
+    }
+
+    const { error } = await supabase.from("profiles").update({ [field]: normalized }).eq("id", profile.id);
     if (error) setMessage({ text: "Failed to save", type: "error" });
-    else { setMessage({ text: "Saved!", type: "success" }); setProfile({ ...profile, [field]: value }); }
+    else { setMessage({ text: "Saved!", type: "success" }); setProfile({ ...profile, [field]: normalized }); }
     setSaving(false);
     setTimeout(() => setMessage(null), 2000);
   };
@@ -66,9 +84,42 @@ export default function SettingsPage() {
             {[5, 10, 15, 20, 30].map(g => (
               <button key={g} onClick={() => updateField("daily_goal", g)} disabled={saving}
                 className={`py-2 rounded-xl border text-sm font-semibold transition-all ${
-                  profile.daily_goal === g ? "border-brand-accent bg-brand-accent/10 text-brand-accent" : "border-brand-border text-brand-dim hover:border-brand-accent/30"
+                  clamp(profile.daily_goal, MIN_GOAL, MAX_GOAL, DEFAULT_DAILY_GOAL) === g ? "border-brand-accent bg-brand-accent/10 text-brand-accent" : "border-brand-border text-brand-dim hover:border-brand-accent/30"
                 }`}>{g}</button>
             ))}
+          </div>
+        </div>
+
+        {/* Session Size */}
+        <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 mb-4">
+          <h3 className="font-bold text-sm mb-3">🃏 Session Size</h3>
+          <p className="text-xs text-brand-dim mb-3">Cards shown in one study session. Daily goal remains separate progress tracking.</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[10, 20, 30, 50, 100].map((limit) => (
+              <button
+                key={limit}
+                onClick={() => updateField("session_limit", limit)}
+                disabled={saving}
+                className={`py-2 rounded-xl border text-sm font-semibold transition-all ${
+                  clamp(profile.session_limit, MIN_GOAL, MAX_GOAL, 25) === limit
+                    ? "border-brand-accent bg-brand-accent/10 text-brand-accent"
+                    : "border-brand-border text-brand-dim hover:border-brand-accent/30"
+                }`}
+              >
+                {limit}
+              </button>
+            ))}
+            <button
+              onClick={() => updateField("session_limit", UNLIMITED_SENTINEL)}
+              disabled={saving}
+              className={`py-2 rounded-xl border text-sm font-semibold transition-all ${
+                profile.session_limit === UNLIMITED_SENTINEL
+                  ? "border-brand-accent bg-brand-accent/10 text-brand-accent"
+                  : "border-brand-border text-brand-dim hover:border-brand-accent/30"
+              }`}
+            >
+              Unlimited
+            </button>
           </div>
         </div>
 
