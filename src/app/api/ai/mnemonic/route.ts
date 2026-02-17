@@ -15,35 +15,43 @@ export async function POST(req: NextRequest) {
   if (wordId) {
     const cached = await getCachedResponse(user.id, "mnemonic", wordId);
     if (cached) {
-      return NextResponse.json({ mnemonic: JSON.parse(cached), cached: true });
+      try {
+        return NextResponse.json({ mnemonic: JSON.parse(cached), cached: true });
+      } catch {
+        return NextResponse.json({ mnemonic: { mnemonic: cached }, cached: true });
+      }
     }
   }
 
-  // Get user's native languages
+  // Get user's preferred language — THIS IS THE FIX
   const { data: profile } = await supabase
     .from("profiles")
-    .select("native_languages")
+    .select("native_languages, preferred_translation")
     .eq("id", user.id)
     .single();
+
+  // Use preferred_translation to determine mnemonic language
+  const preferredLang = (profile?.preferred_translation || "en") as "en" | "hi" | "pa";
 
   const prompt = mnemonicPrompt({
     french, english, hindi, punjabi, partOfSpeech,
     level: level || "A1",
-    nativeLanguages: profile?.native_languages || ["en"],
+    preferredLanguage: preferredLang,
     example,
   });
 
-  const result = await callClaude({ userId: user.id, feature: "mnemonics_used", prompt, maxTokens: 256 });
+  const result = await callClaude({ userId: user.id, prompt, maxTokens: 256 });
 
   if (result.error) {
-    if (result.limitReached) {
-      return NextResponse.json({ error: "Daily limit reached. Add your API key in Settings for unlimited.", limitReached: true }, { status: 429 });
-    }
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
   let mnemonic;
-  try { mnemonic = JSON.parse(result.content); } catch { mnemonic = { mnemonic: result.content, bridge_language: "none", sound_bridge: null }; }
+  try {
+    mnemonic = JSON.parse(result.content);
+  } catch {
+    mnemonic = { mnemonic: result.content, bridge_language: "none", sound_bridge: null };
+  }
 
   // Cache + save to card
   if (wordId) {

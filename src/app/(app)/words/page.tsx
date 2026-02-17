@@ -13,21 +13,20 @@ export default async function WordsPage() {
     .eq("id", user.id)
     .single();
 
-  // Get all words
-  const { data: words } = await supabase
-    .from("words")
-    .select("*")
-    .order("cefr_level", { ascending: true })
-    .order("category", { ascending: true });
-
-  // Get user's card statuses
+  // CHANGED: Only get words the user has been assigned (no spoilers)
   const { data: userCards } = await supabase
     .from("user_cards")
-    .select("word_id, status, times_correct, times_seen, ai_mnemonic")
-    .eq("user_id", user.id);
+    .select("word_id, status, times_correct, times_seen, ai_mnemonic, word:words(*)")
+    .eq("user_id", user.id)
+    .order("status", { ascending: true });
+
+  // Build words array from user cards only
+  const words = (userCards || [])
+    .filter((c: any) => c.word)
+    .map((c: any) => c.word);
 
   const cardMap: Record<string, { status: string; accuracy: number; mnemonic: string | null }> = {};
-  (userCards || []).forEach((c) => {
+  (userCards || []).forEach((c: any) => {
     cardMap[c.word_id] = {
       status: c.status || "new",
       accuracy: c.times_seen ? Math.round((c.times_correct / c.times_seen) * 100) : 0,
@@ -37,7 +36,7 @@ export default async function WordsPage() {
 
   return (
     <WordBrowserClient
-      words={words || []}
+      words={words}
       cardMap={cardMap}
       userLevel={profile?.current_level || "A0"}
       preferredLang={profile?.preferred_translation || "en"}

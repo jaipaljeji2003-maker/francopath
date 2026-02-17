@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     dailyGoal: profile.daily_goal || 10,
   });
 
-  const result = await callClaude({ userId: user.id, feature: "session_plans_used", prompt, maxTokens: 256 });
+  const result = await callClaude({ userId: user.id, prompt, maxTokens: 256 });
 
   if (result.error) {
     // Fallback: rule-based plan if AI fails

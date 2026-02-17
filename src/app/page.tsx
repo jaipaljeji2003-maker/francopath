@@ -160,7 +160,7 @@ export default async function Home() {
             { icon: "📊", title: "Progress Tracking", desc: "Dashboard + streak calendar" },
             { icon: "🎯", title: "TCF/TEF Focused", desc: "Exam-frequency vocabulary" },
             { icon: "🔊", title: "Pronunciation", desc: "Listen to native French audio" },
-            { icon: "🔑", title: "BYOK", desc: "Bring your own API key" },
+            { icon: "🔮", title: "Score Prediction", desc: "Honest exam readiness estimate" },
             { icon: "📱", title: "Mobile Ready", desc: "PWA — install on your phone" },
             { icon: "🌐", title: "Trilingual", desc: "English + ਪੰਜਾਬੀ + हिन्दी" },
             { icon: "🆓", title: "Free to Start", desc: "No credit card needed" },

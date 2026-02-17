@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import ListeningClient from "@/components/exam/ListeningClient";
+import PredictionClient from "@/components/exam/PredictionClient";
 
-export default async function ListenPage() {
+export default async function PredictPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -13,10 +13,7 @@ export default async function ListenPage() {
     .eq("id", user.id)
     .single();
 
-  return (
-    <ListeningClient
-      level={profile?.current_level || "B1"}
-      examType={profile?.target_exam || "TCF"}
-    />
-  );
+  if (!profile) redirect("/placement");
+
+  return <PredictionClient level={profile.current_level} examType={profile.target_exam || "TCF"} />;
 }

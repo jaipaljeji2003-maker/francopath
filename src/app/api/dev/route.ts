@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
         exam_prep_unlocked: true,
         onboarding_complete: true,
         current_level: "B2",
-        ai_tier: "free",
         current_streak: 15,
         longest_streak: 30,
       }).eq("id", targetUser);

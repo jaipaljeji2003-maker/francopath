@@ -17,12 +17,14 @@ const STATUS_COLORS: Record<string, string> = {
   review: "bg-brand-accent/20 text-brand-accent",
   learning: "bg-brand-warning/20 text-brand-warning",
   new: "bg-brand-border text-brand-dim",
+  burned: "bg-brand-gold/20 text-brand-gold",
 };
 const STATUS_LABELS: Record<string, string> = {
   mastered: "Mastered",
   review: "Reviewing",
   learning: "Learning",
   new: "New",
+  burned: "Burned 🔥",
 };
 
 export default function WordBrowserClient({ words, cardMap, userLevel, preferredLang }: Props) {

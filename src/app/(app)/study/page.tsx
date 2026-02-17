@@ -4,10 +4,7 @@ import StudyClient from "@/components/study/StudyClient";
 
 export default async function StudyPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
@@ -18,26 +15,29 @@ export default async function StudyPage() {
 
   if (!profile?.onboarding_complete) redirect("/placement");
 
-  // Get user cards with word data, prioritize due cards
+  const dailyGoal = profile.daily_goal || 10;
   const now = new Date().toISOString();
 
-  // Due cards first
+  // Due cards first (NOT burned)
   const { data: dueCards } = await supabase
     .from("user_cards")
     .select("*, word:words(*)")
     .eq("user_id", user.id)
     .lte("next_review", now)
     .gt("times_seen", 0)
+    .neq("status", "burned")
     .order("next_review", { ascending: true })
-    .limit(8);
+    .limit(Math.ceil(dailyGoal * 0.7));
 
-  // New cards
+  // New cards (proportion based on daily goal)
+  const newCardCount = Math.max(2, Math.floor(dailyGoal * 0.3));
   const { data: newCards } = await supabase
     .from("user_cards")
     .select("*, word:words(*)")
     .eq("user_id", user.id)
     .eq("times_seen", 0)
-    .limit(4);
+    .neq("status", "burned")
+    .limit(newCardCount);
 
   const queue = [...(dueCards || []), ...(newCards || [])];
 
@@ -49,9 +49,10 @@ export default async function StudyPage() {
 
   return (
     <StudyClient
-      cards={queue.slice(0, 10)}
+      cards={queue.slice(0, dailyGoal)}
       userId={user.id}
       preferredLang={profile.preferred_translation || "en"}
+      dailyGoal={dailyGoal}
     />
   );
 }

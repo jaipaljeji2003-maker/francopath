@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     determinedLevel,
   });
 
-  const result = await callClaude({ userId: user.id, feature: "analyses_used", prompt, maxTokens: 384 });
+  const result = await callClaude({ userId: user.id, prompt, maxTokens: 384 });
 
   if (result.error) {
     // Fallback if AI fails

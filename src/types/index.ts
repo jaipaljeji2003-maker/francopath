@@ -1,8 +1,7 @@
 export type CEFRLevel = "A0" | "A1" | "A2" | "B1" | "B2";
 export type TranslationLang = "en" | "hi" | "pa";
 export type ExamType = "TCF" | "TEF";
-export type AITier = "free" | "byok";
-export type CardStatus = "new" | "learning" | "review" | "mastered" | "suspended";
+export type CardStatus = "new" | "learning" | "review" | "mastered" | "burned" | "suspended";
 
 export interface Profile {
   id: string;
@@ -19,7 +18,6 @@ export interface Profile {
   timezone: string;
   onboarding_complete: boolean;
   exam_prep_unlocked: boolean;
-  ai_tier: AITier;
   created_at: string;
 }
 

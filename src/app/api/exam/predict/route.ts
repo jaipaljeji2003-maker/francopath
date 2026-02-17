@@ -10,24 +10,11 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("exam_prep_unlocked, current_level, target_exam")
+    .select("current_level, target_exam")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.exam_prep_unlocked) {
-    return NextResponse.json({ error: "Exam prep not unlocked" }, { status: 403 });
-  }
-
-  // Get drill history
-  const { data: drills } = await supabase
-    .from("exam_drills")
-    .select("drill_type, score, max_score")
-    .eq("user_id", user.id)
-    .eq("completed", true)
-    .order("completed_at", { ascending: false })
-    .limit(20);
-
-  // Get card stats
+  // Card stats
   const { data: cards } = await supabase
     .from("user_cards")
     .select("status, times_seen, times_correct, times_wrong, word:words(category)")
@@ -51,24 +38,51 @@ export async function POST(req: NextRequest) {
     .filter(([, s]) => s.t > 2 && (s.c / s.t) < 0.65)
     .map(([cat]) => cat);
 
+  // Writing history
+  const { data: writingDrills } = await supabase
+    .from("exam_drills")
+    .select("score, max_score, questions")
+    .eq("user_id", user.id)
+    .eq("drill_type", "writing")
+    .eq("completed", true)
+    .order("completed_at", { ascending: false })
+    .limit(10);
+
+  const writingHistory = (writingDrills || []).map(d => ({
+    taskNumber: (d.questions as any)?.taskNumber || 1,
+    score: d.score || 0,
+    maxScore: d.max_score || 20,
+  }));
+
+  // Study days count
+  const { data: activity } = await supabase
+    .from("daily_activity")
+    .select("activity_date")
+    .eq("user_id", user.id);
+
   const prompt = scorePredictionPrompt({
-    examType: profile.target_exam || "TCF",
-    drillHistory: (drills || []).map(d => ({ type: d.drill_type, score: d.score || 0, maxScore: d.max_score || 5 })),
+    examType: profile?.target_exam || "TCF",
+    level: profile?.current_level || "A1",
     accuracy,
-    level: profile.current_level,
     masteredWords: mastered,
     totalWords: allCards.length,
     weakAreas,
+    writingHistory,
+    totalStudyDays: (activity || []).length,
+    totalReviews: totalSeen,
   });
 
-  const result = await callClaude({ userId: user.id, feature: "analyses_used", prompt, maxTokens: 768 });
+  const result = await callClaude({ userId: user.id, prompt, maxTokens: 768 });
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
   let prediction;
-  try { prediction = JSON.parse(result.content); } catch { prediction = { predicted_level: profile.current_level, encouragement: result.content }; }
+  try { prediction = JSON.parse(result.content); } catch { prediction = { has_enough_data: false, honest_assessment: result.content }; }
 
-  return NextResponse.json({ prediction, stats: { accuracy, mastered, total: allCards.length, drillsCompleted: (drills || []).length } });
+  return NextResponse.json({
+    prediction,
+    stats: { accuracy, mastered, total: allCards.length, writingCount: writingHistory.length, studyDays: (activity || []).length },
+  });
 }

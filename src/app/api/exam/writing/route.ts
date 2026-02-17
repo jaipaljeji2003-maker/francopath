@@ -1,37 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { callClaude } from "@/lib/ai/claude";
-import { writingPrompt } from "@/lib/ai/prompts";
+import { writingTaskPrompt } from "@/lib/ai/prompts";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { taskType, examType } = await req.json();
+  const { taskNumber, examType, questionType } = await req.json();
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("exam_prep_unlocked, current_level, target_exam")
+    .select("current_level, target_exam")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.exam_prep_unlocked) {
-    return NextResponse.json({ error: "Exam prep not unlocked" }, { status: 403 });
-  }
+  // Get recent vocab user is learning (for personalized tasks)
+  const { data: recentCards } = await supabase
+    .from("user_cards")
+    .select("word:words(french)")
+    .eq("user_id", user.id)
+    .in("status", ["learning", "review"])
+    .order("last_review", { ascending: false })
+    .limit(15);
 
-  const prompt = writingPrompt({
-    examType: examType || profile.target_exam || "TCF",
-    level: profile.current_level,
-    taskType: taskType || "formal_letter",
+  const recentVocab = (recentCards || [])
+    .map((c: any) => c.word?.french)
+    .filter(Boolean);
+
+  const prompt = writingTaskPrompt({
+    examType: examType || profile?.target_exam || "TCF",
+    level: profile?.current_level || "A1",
+    taskNumber: taskNumber || 1,
+    questionType,
+    recentVocab,
   });
 
-  const result = await callClaude({ userId: user.id, feature: "drills_used", prompt, maxTokens: 768 });
+  const result = await callClaude({ userId: user.id, prompt, maxTokens: 768 });
 
   if (result.error) {
-    if (result.limitReached) {
-      return NextResponse.json({ error: "Daily limit reached.", limitReached: true }, { status: 429 });
-    }
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
