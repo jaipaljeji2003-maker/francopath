@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import seedWords from "@/data/seed-words.json";
 import expandedWords from "@/data/expanded-words.json";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 /**
  * POST /api/dev/seed-words — seeds ranked word bank
@@ -16,7 +17,11 @@ export async function POST(req: NextRequest) {
   const { secret: reqSecret } = await req.json();
   if (reqSecret !== secret) return NextResponse.json({ error: "Invalid secret" }, { status: 403 });
 
-  const supabase = await createClient();
+  const supabase = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 
   // Get existing words to avoid duplicates
   const { data: existing } = await supabase.from("words").select("french");
