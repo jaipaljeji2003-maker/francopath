@@ -108,7 +108,7 @@ export default function PlacementClient({ userId, userName, isRetake }: Props) {
       const levels: CEFRLevel[] = ["A0", "A1", "A2", "B1", "B2"];
       const levelIdx = levels.indexOf(result.level);
       const targetLevels = levels.slice(0, levelIdx + 1);
-      const { data: words } = await supabase.from("words").select("id").in("cefr_level", targetLevels);
+      const { data: words } = await supabase.from("words").select("id").in("cefr_level", targetLevels).order("tcf_frequency", { ascending: false });
       if (words?.length) {
         const userCards = words.map(w => ({ user_id: userId, word_id: w.id }));
         for (let i = 0; i < userCards.length; i += 50) {

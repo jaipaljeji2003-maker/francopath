@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { calculateSRS } from "@/lib/srs/sm2";
 import { usePronounce } from "@/hooks/usePronounce";
-import type { CardStatus, TranslationLang } from "@/types";
+import type { TranslationLang } from "@/types";
 
 interface MnemonicData {
   mnemonic: string;
@@ -130,7 +130,7 @@ export default function StudyClient({
     );
 
     // Auto-burn: ease > 3.0 AND interval > 60 AND 5+ consecutive correct
-    let finalStatus: CardStatus = srsResult.status as CardStatus;
+    let finalStatus: "new" | "learning" | "review" | "mastered" | "burned" = srsResult.status;
     if (
       srsResult.easeFactor > 3.0 &&
       srsResult.intervalDays > 60 &&

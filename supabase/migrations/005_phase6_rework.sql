@@ -52,3 +52,14 @@ END $$;
 -- Note: "burned" status is just a value in user_cards.status TEXT field
 -- No schema change needed — the column already accepts any text value
 -- Burned cards: status = 'burned', excluded from study queries
+
+-- Add example translation columns for Hindi/Punjabi (if missing)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'words' AND column_name = 'example_translation_hi') THEN
+    ALTER TABLE words ADD COLUMN example_translation_hi TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'words' AND column_name = 'example_translation_pa') THEN
+    ALTER TABLE words ADD COLUMN example_translation_pa TEXT;
+  END IF;
+END $$;

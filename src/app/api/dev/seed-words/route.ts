@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import seedWords from "@/data/seed-words.json";
 import expandedWords from "@/data/expanded-words.json";
 
 /**
- * POST /api/dev/seed-words — seeds expanded word bank
+ * POST /api/dev/seed-words — seeds ranked word bank
+ * Primary source: seed-words.json (272 words, exam-ranked A0-B2)
+ * Secondary: expanded-words.json (supplementary)
  * Skips duplicates by checking existing French words
- * Protected by DEV_MODE_SECRET
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.DEV_MODE_SECRET;
@@ -20,8 +22,18 @@ export async function POST(req: NextRequest) {
   const { data: existing } = await supabase.from("words").select("french");
   const existingSet = new Set((existing || []).map(w => w.french.toLowerCase()));
 
+  // Combine: ranked seed words first, then expanded (de-duped)
+  const allWords = [...(seedWords as any[])];
+  const seenFrench = new Set(allWords.map(w => w.french.toLowerCase()));
+  for (const w of expandedWords as any[]) {
+    if (!seenFrench.has(w.french.toLowerCase())) {
+      seenFrench.add(w.french.toLowerCase());
+      allWords.push(w);
+    }
+  }
+
   // Filter to only new words
-  const newWords = (expandedWords as any[]).filter(
+  const newWords = allWords.filter(
     w => !existingSet.has(w.french.toLowerCase())
   );
 
@@ -29,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: "All words already exist", added: 0, total: existingSet.size });
   }
 
-  // Insert in batches of 50
+  // Insert in batches of 50 (order preserved = frequency order)
   let added = 0;
   for (let i = 0; i < newWords.length; i += 50) {
     const batch = newWords.slice(i, i + 50).map(w => ({
@@ -43,10 +55,12 @@ export async function POST(req: NextRequest) {
       category: w.category,
       example_sentence: w.example_sentence,
       example_translation_en: w.example_translation_en,
-      tcf_frequency: w.tcf_frequency,
-      tef_frequency: w.tef_frequency,
-      false_friend_warning: w.false_friend_warning,
-      notes: w.notes,
+      example_translation_hi: w.example_translation_hi || null,
+      example_translation_pa: w.example_translation_pa || null,
+      tcf_frequency: w.tcf_frequency || 5,
+      tef_frequency: w.tef_frequency || 5,
+      false_friend_warning: w.false_friend_warning || null,
+      notes: w.notes || null,
     }));
 
     const { error } = await supabase.from("words").insert(batch);
@@ -57,9 +71,9 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    message: `Seeded ${added} new words`,
+    message: `Seeded ${added} new words (ranked by exam priority)`,
     added,
-    skipped: expandedWords.length - added,
+    skipped: allWords.length - added,
     total: existingSet.size + added,
   });
 }
