@@ -15,6 +15,7 @@ export interface Profile {
   target_exam: ExamType;
   target_exam_date: string | null;
   daily_goal: number;
+  session_limit: number | null;
   timezone: string;
   onboarding_complete: boolean;
   exam_prep_unlocked: boolean;
