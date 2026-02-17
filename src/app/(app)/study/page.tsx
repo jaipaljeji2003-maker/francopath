@@ -29,7 +29,7 @@ export default async function StudyPage() {
     .order("next_review", { ascending: true })
     .limit(Math.ceil(dailyGoal * 0.7));
 
-  // New cards (proportion based on daily goal)
+  // New cards — served in seed order (highest exam frequency first, since seed data is pre-sorted)
   const newCardCount = Math.max(2, Math.floor(dailyGoal * 0.3));
   const { data: newCards } = await supabase
     .from("user_cards")
@@ -37,6 +37,7 @@ export default async function StudyPage() {
     .eq("user_id", user.id)
     .eq("times_seen", 0)
     .neq("status", "burned")
+    .order("created_at", { ascending: true })
     .limit(newCardCount);
 
   const queue = [...(dueCards || []), ...(newCards || [])];
