@@ -47,11 +47,13 @@ export default function StudyClient({
   userId,
   preferredLang,
   dailyGoal,
+  deckPlanSummary,
 }: {
   cards: CardWithWord[];
   userId: string;
   preferredLang: TranslationLang;
   dailyGoal: number;
+  deckPlanSummary?: string;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -250,6 +252,12 @@ export default function StudyClient({
         </div>
 
         {/* Language toggle */}
+        {deckPlanSummary && (
+          <div className="mb-4 text-center text-xs text-brand-dim">
+            🧭 {deckPlanSummary}
+          </div>
+        )}
+
         <div className="flex justify-center gap-2 mb-6">
           {(["en", "pa", "hi"] as const).map(lang => (
             <button key={lang} onClick={() => setShowLang(lang)} className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${showLang === lang ? "border-brand-accent bg-brand-accent/10 text-brand-accent" : "border-brand-border text-brand-dim"}`}>

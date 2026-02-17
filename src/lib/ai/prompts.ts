@@ -219,6 +219,46 @@ Respond ONLY with this JSON:
 }`;
 }
 
+export function deckPlanPrompt(params: {
+  currentLevel: string;
+  levelAccuracy: number | null;
+  accuracyByLevel: Record<string, number>;
+}) {
+  return `Create a strict JSON "deck plan" strategy for an SRS language app.
+
+Rules:
+- You are ONLY planning strategy. Do not pick concrete words.
+- Keep due-review priority in mind (review-heavy by default).
+- Support level may only be one CEFR level below primary.
+- Valid levels: A1, A2, B1, B2, C1, C2.
+- supportCapPct must be between 0 and 50.
+- mix.reviewPct + mix.newPct must equal exactly 100.
+- rationale must be a non-empty short explanation.
+
+User data:
+- Current level: ${params.currentLevel}
+- Accuracy at current level: ${params.levelAccuracy ?? "unknown"}%
+- Accuracy by level: ${JSON.stringify(params.accuracyByLevel)}
+
+Respond ONLY with this JSON shape:
+{
+  "targetLevel": "A1|A2|B1|B2|C1|C2",
+  "levelBand": {
+    "primary": "A1|A2|B1|B2|C1|C2",
+    "support": "A1|A2|B1|B2|C1|C2",
+    "supportCapPct": 20
+  },
+  "mix": {
+    "reviewPct": 70,
+    "newPct": 30
+  },
+  "focusTags": ["optional", "tags"],
+  "avoidTags": ["optional", "tags"],
+  "difficultyBias": "easy|balanced|hard",
+  "rationale": "brief rationale"
+}`;
+}
+
 // ═══════════════════════════════════════════════════
 // WRITING PRACTICE — TCF/TEF TASK STRUCTURE
 // ═══════════════════════════════════════════════════

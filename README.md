@@ -14,6 +14,19 @@ Built for English, Punjabi, and Hindi speakers. Master French with spaced repeti
 - 🎓 **Exam Prep Mode** — Unlocks after B2 with drills, writing practice, and mock exams
 - 🔑 **BYOK** — Bring your own API key for unlimited AI features
 
+## Contextual Update: Deck Planning (AI proposes, SRS disposes)
+
+FrancoPath now uses a **plan-first** study flow for sessions:
+
+- The AI produces a **Deck Plan strategy** (level band, review/new mix, optional focus tags, rationale).
+- Deterministic server logic selects actual cards from the user's SRS data.
+- **Due reviews are always prioritized first** and are never skipped.
+- AI never picks arbitrary words directly from the full DB.
+- Plans are cached in `ai_generated_content` as `content_type = "deck_plan"` (with `word_id = null`) and reused for the same Toronto operational day to reduce API calls.
+- If AI output is unavailable/invalid, a deterministic fallback plan is used (70/30 review/new with optional one-level-below support).
+
+This keeps selection transparent, reproducible, and aligned with exam-readiness goals while preserving existing SRS guarantees.
+
 ## Tech Stack
 
 - **Frontend:** Next.js 14, Tailwind CSS, Framer Motion
