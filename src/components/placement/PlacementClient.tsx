@@ -104,11 +104,9 @@ export default function PlacementClient({ userId, userName, isRetake }: Props) {
         target_exam: targetExam, onboarding_complete: true,
       }).eq("id", userId);
 
-      // Initialize cards
-      const levels: CEFRLevel[] = ["A0", "A1", "A2", "B1", "B2"];
-      const levelIdx = levels.indexOf(result.level);
-      const targetLevels = levels.slice(0, levelIdx + 1);
-      const { data: words } = await supabase.from("words").select("id").in("cefr_level", targetLevels).order("tcf_frequency", { ascending: false });
+      // Initialize cards — ONLY at the determined level (not lower levels)
+      // Study sessions will pull from one level below as support if needed
+      const { data: words } = await supabase.from("words").select("id").eq("cefr_level", result.level).order("tcf_frequency", { ascending: false });
       if (words?.length) {
         const userCards = words.map(w => ({ user_id: userId, word_id: w.id }));
         for (let i = 0; i < userCards.length; i += 50) {
@@ -116,8 +114,29 @@ export default function PlacementClient({ userId, userName, isRetake }: Props) {
         }
       }
     } else {
-      // Retake: just update level
+      // Retake: update level AND seed cards for the new level if they don't exist yet
       await supabase.from("profiles").update({ current_level: result.level }).eq("id", userId);
+
+      // Get words at the new level that user doesn't already have cards for
+      const { data: existingCards } = await supabase
+        .from("user_cards")
+        .select("word_id")
+        .eq("user_id", userId);
+      const existingWordIds = new Set((existingCards || []).map(c => c.word_id));
+
+      const { data: newLevelWords } = await supabase
+        .from("words")
+        .select("id")
+        .eq("cefr_level", result.level)
+        .order("tcf_frequency", { ascending: false });
+
+      const wordsToAdd = (newLevelWords || []).filter(w => !existingWordIds.has(w.id));
+      if (wordsToAdd.length > 0) {
+        const newCards = wordsToAdd.map(w => ({ user_id: userId, word_id: w.id }));
+        for (let i = 0; i < newCards.length; i += 50) {
+          await supabase.from("user_cards").insert(newCards.slice(i, i + 50));
+        }
+      }
     }
 
     // Save result

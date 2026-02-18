@@ -17,15 +17,19 @@ export default async function StudyPage() {
 
   const dailyGoal = profile.daily_goal || 10;
   const now = new Date().toISOString();
-  const userLevel = profile.current_level || "A0";
-  const levelOrder = ["A0", "A1", "A2", "B1", "B2"];
-  const userLevelIdx = levelOrder.indexOf(userLevel);
+  const userLevel = profile.current_level || "A1";
 
-  // Due cards first (NOT burned)
+  // ─── LEVEL-LOCKED STUDY ───
+  // Only serve cards AT the user's current level.
+  // If user is B1, they study B1 vocab only — not A0/A1/A2 basics.
+  // This keeps the challenge at the optimal zone (not too easy, not too hard).
+
+  // 1. Due cards at user's level (review cards that need revisiting)
   const { data: dueCards } = await supabase
     .from("user_cards")
-    .select("*, word:words(*)")
+    .select("*, word:words!inner(*)")
     .eq("user_id", user.id)
+    .eq("word.cefr_level", userLevel)
     .lte("next_review", now)
     .gt("times_seen", 0)
     .neq("status", "burned")
@@ -34,35 +38,63 @@ export default async function StudyPage() {
 
   const dueCount = dueCards?.length || 0;
 
-  // Fill remaining slots with new cards — prioritize user's current level
-  // Fetch more than needed so we can sort by level relevance
+  // 2. New cards at user's level (unseen vocab to learn)
   const newCardCount = Math.max(2, dailyGoal - dueCount);
-  const { data: rawNewCards } = await supabase
+  const { data: newCards } = await supabase
     .from("user_cards")
-    .select("*, word:words(*)")
+    .select("*, word:words!inner(*)")
     .eq("user_id", user.id)
+    .eq("word.cefr_level", userLevel)
     .eq("times_seen", 0)
     .neq("status", "burned")
     .order("created_at", { ascending: true })
-    .limit(newCardCount * 3);
+    .limit(newCardCount);
 
-  // Sort new cards: prioritize words at/near user's level, then by exam frequency
-  const newCards = (rawNewCards || [])
-    .sort((a, b) => {
-      const aLevel = levelOrder.indexOf(a.word?.cefr_level || "A0");
-      const bLevel = levelOrder.indexOf(b.word?.cefr_level || "A0");
-      // Distance from user's level (0 = same level, higher = further away)
-      const aDist = Math.abs(aLevel - userLevelIdx);
-      const bDist = Math.abs(bLevel - userLevelIdx);
-      if (aDist !== bDist) return aDist - bDist; // Closer to user level first
-      // Same distance: prefer higher level
-      if (aLevel !== bLevel) return bLevel - aLevel;
-      // Same level: prefer higher exam frequency
-      return (b.word?.tcf_frequency || 0) - (a.word?.tcf_frequency || 0);
-    })
-    .slice(0, newCardCount);
+  const newCount = newCards?.length || 0;
 
-  const queue = [...(dueCards || []), ...newCards];
+  // 3. If not enough cards at current level, pull from one level below as support
+  let supportCards: typeof dueCards = [];
+  const levelOrder = ["A0", "A1", "A2", "B1", "B2"];
+  const levelIdx = levelOrder.indexOf(userLevel);
+  const totalSoFar = dueCount + newCount;
+
+  if (totalSoFar < dailyGoal && levelIdx > 0) {
+    const supportLevel = levelOrder[levelIdx - 1];
+    const supportNeeded = dailyGoal - totalSoFar;
+
+    // Support: due cards from one level below
+    const { data: supportDue } = await supabase
+      .from("user_cards")
+      .select("*, word:words!inner(*)")
+      .eq("user_id", user.id)
+      .eq("word.cefr_level", supportLevel)
+      .lte("next_review", now)
+      .gt("times_seen", 0)
+      .neq("status", "burned")
+      .order("next_review", { ascending: true })
+      .limit(supportNeeded);
+
+    const supportDueCount = supportDue?.length || 0;
+    const supportNewNeeded = supportNeeded - supportDueCount;
+
+    let supportNew: typeof dueCards = [];
+    if (supportNewNeeded > 0) {
+      const { data } = await supabase
+        .from("user_cards")
+        .select("*, word:words!inner(*)")
+        .eq("user_id", user.id)
+        .eq("word.cefr_level", supportLevel)
+        .eq("times_seen", 0)
+        .neq("status", "burned")
+        .order("created_at", { ascending: true })
+        .limit(supportNewNeeded);
+      supportNew = data || [];
+    }
+
+    supportCards = [...(supportDue || []), ...(supportNew || [])];
+  }
+
+  const queue = [...(dueCards || []), ...(newCards || []), ...(supportCards || [])];
 
   // Shuffle
   for (let i = queue.length - 1; i > 0; i--) {
@@ -70,12 +102,18 @@ export default async function StudyPage() {
     [queue[i], queue[j]] = [queue[j], queue[i]];
   }
 
+  const supportCount = supportCards?.length || 0;
+  const levelLabel = supportCount > 0
+    ? `${userLevel} + ${levelOrder[levelIdx - 1]} support`
+    : userLevel;
+
   return (
     <StudyClient
       cards={queue.slice(0, dailyGoal)}
       userId={user.id}
       preferredLang={profile.preferred_translation || "en"}
       dailyGoal={dailyGoal}
+      deckPlanSummary={`Studying: ${levelLabel} · ${dueCount} review + ${newCount} new`}
     />
   );
 }
