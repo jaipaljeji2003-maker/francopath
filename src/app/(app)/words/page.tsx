@@ -13,13 +13,11 @@ export default async function WordsPage() {
     .eq("id", user.id)
     .single();
 
-  // Only show words at user's current level — no lower-level clutter
-  const userLevel = profile?.current_level || "A0";
+  // Show ALL words the user has cards for (active vocabulary only, no level filter)
   const { data: userCards } = await supabase
     .from("user_cards")
     .select("word_id, status, times_correct, times_seen, ai_mnemonic, word:words!inner(*)")
     .eq("user_id", user.id)
-    .eq("word.cefr_level", userLevel)
     .order("status", { ascending: true });
 
   // Build words array from user cards only

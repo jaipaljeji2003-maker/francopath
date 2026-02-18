@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
         longest_streak: 30,
       }).eq("id", targetUser);
 
-      // Initialize cards for all words if not done
+      // DEV CONVENIENCE: Seed all cards (bypasses normal StudySetup flow)
+      // In production, users add words via the pre-session setup
       const { data: words } = await supabase.from("words").select("id");
       const { data: existingCards } = await supabase
         .from("user_cards")
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ success: true, message: "All features unlocked, level set to B2, cards initialized" });
+      return NextResponse.json({ success: true, message: "All features unlocked, level set to B2, cards initialized (dev bypass)" });
     }
 
     case "set_level": {
@@ -98,18 +99,16 @@ export async function POST(req: NextRequest) {
     }
 
     case "reset_progress": {
-      await supabase.from("user_cards").update({
-        status: "new", times_seen: 0, times_correct: 0, times_wrong: 0,
-        ease_factor: 2.5, interval_days: 0, repetition: 0,
-        next_review: new Date().toISOString(), ai_mnemonic: null,
-      }).eq("user_id", targetUser);
+      // Delete user_cards entirely (simulates fresh user with no vocabulary)
+      await supabase.from("card_reviews").delete().eq("user_id", targetUser);
+      await supabase.from("user_cards").delete().eq("user_id", targetUser);
       await supabase.from("daily_activity").delete().eq("user_id", targetUser);
       await supabase.from("study_sessions").delete().eq("user_id", targetUser);
       await supabase.from("exam_drills").delete().eq("user_id", targetUser);
       await supabase.from("profiles").update({
         current_streak: 0, longest_streak: 0, last_study_date: null, exam_prep_unlocked: false,
       }).eq("id", targetUser);
-      return NextResponse.json({ success: true, message: "All progress reset" });
+      return NextResponse.json({ success: true, message: "All progress reset (cards deleted, fresh start)" });
     }
 
     default:

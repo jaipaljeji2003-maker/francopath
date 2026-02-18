@@ -15,7 +15,7 @@ export default async function DashboardPage() {
 
   if (profile && !profile.onboarding_complete) redirect("/placement");
 
-  // Card stats — filtered to user's current level only
+  // Card stats — all user's active cards (across levels)
   const userLevel = profile?.current_level || "A0";
   const { data: cards } = await supabase
     .from("user_cards")
@@ -26,7 +26,7 @@ export default async function DashboardPage() {
   const now = new Date().toISOString();
   const allCards = cards || [];
   const dueCount = allCards.filter((c) => c.next_review <= now && c.times_seen > 0).length;
-  const newCount = allCards.filter((c) => c.times_seen === 0).length;
+  const queuedCount = allCards.filter((c) => c.times_seen === 0).length;
   const masteredCount = allCards.filter((c) => c.status === "mastered").length;
   const totalCorrect = allCards.reduce((s, c) => s + (c.times_correct || 0), 0);
   const totalSeen = allCards.reduce((s, c) => s + (c.times_seen || 0), 0);
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
       userId={user.id}
       stats={{
         dueCount,
-        newCount,
+        queuedCount,
         masteredCount,
         totalCards: allCards.length,
         accuracy,

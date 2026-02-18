@@ -23,7 +23,7 @@ const STATUS_LABELS: Record<string, string> = {
   mastered: "Mastered",
   review: "Reviewing",
   learning: "Learning",
-  new: "New",
+  new: "Queued",
   burned: "Burned 🔥",
 };
 
@@ -147,7 +147,7 @@ export default function WordBrowserClient({ words, cardMap, userLevel, preferred
             <option value="mastered">Mastered</option>
             <option value="review">Reviewing</option>
             <option value="learning">Learning</option>
-            <option value="new">New</option>
+            <option value="new">Queued</option>
           </select>
 
           {/* Language toggle */}
@@ -283,9 +283,20 @@ export default function WordBrowserClient({ words, cardMap, userLevel, preferred
             );
           })}
 
-          {filtered.length === 0 && (
+          {filtered.length === 0 && words.length > 0 && (
             <div className="text-center py-12 text-brand-dim text-sm">
               No words match your filters
+            </div>
+          )}
+
+          {words.length === 0 && (
+            <div className="text-center py-16">
+              <div className="text-5xl mb-4">📚</div>
+              <h3 className="text-lg font-bold mb-2">No words yet!</h3>
+              <p className="text-brand-dim text-sm mb-6">Start a study session to add your first words.</p>
+              <Link href="/study" className="px-6 py-3 rounded-xl bg-gradient-to-r from-brand-accent to-purple-500 text-white font-bold text-sm">
+                Go to Study
+              </Link>
             </div>
           )}
         </div>

@@ -1,8 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import StudyClient from "@/components/study/StudyClient";
+import StudySetup from "@/components/study/StudySetup";
 
-export default async function StudyPage() {
+export default async function StudyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ready?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -16,13 +21,54 @@ export default async function StudyPage() {
   if (!profile?.onboarding_complete) redirect("/placement");
 
   const dailyGoal = profile.daily_goal || 10;
-  const now = new Date().toISOString();
   const userLevel = profile.current_level || "A1";
+  const params = await searchParams;
+  const isReady = params.ready === "1";
 
-  // ─── STRICT LEVEL-LOCKED STUDY ───
-  // ONLY serve cards AT the user's current level. NO exceptions.
-  // B2 = only B2 vocab. A1 = only A1 vocab. No support levels, no mixing.
-  // User can manually drop to a lower level from settings if they want easier vocab.
+  // ─── SETUP MODE: show pre-session page ───
+  if (!isReady) {
+    const now = new Date().toISOString();
+
+    // Count due review cards at user's level
+    const { count: dueCardCount } = await supabase
+      .from("user_cards")
+      .select("id, word:words!inner(cefr_level)", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("word.cefr_level", userLevel)
+      .lte("next_review", now)
+      .gt("times_seen", 0)
+      .neq("status", "burned");
+
+    // Count available new words (words at level NOT in user_cards)
+    const { count: totalWordsAtLevel } = await supabase
+      .from("words")
+      .select("id", { count: "exact", head: true })
+      .eq("cefr_level", userLevel);
+
+    const { count: userCardsAtLevel } = await supabase
+      .from("user_cards")
+      .select("id, word:words!inner(cefr_level)", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("word.cefr_level", userLevel);
+
+    const availableNewWordCount = (totalWordsAtLevel || 0) - (userCardsAtLevel || 0);
+
+    return (
+      <StudySetup
+        userId={user.id}
+        userLevel={userLevel}
+        targetExam={profile.target_exam || "TCF"}
+        dueCardCount={dueCardCount || 0}
+        availableNewWordCount={Math.max(0, availableNewWordCount)}
+        defaultNewWords={profile.daily_new_words ?? 5}
+        dailyGoal={dailyGoal}
+        preferredLang={profile.preferred_translation || "en"}
+      />
+    );
+  }
+
+  // ─── STUDY MODE: serve cards ───
+  const now = new Date().toISOString();
 
   // 1. Due cards at user's level (review cards that need revisiting)
   const { data: dueCards } = await supabase
@@ -38,7 +84,7 @@ export default async function StudyPage() {
 
   const dueCount = dueCards?.length || 0;
 
-  // 2. New cards at user's level (unseen vocab to learn)
+  // 2. New cards at user's level (recently added, unseen vocab)
   const newCardCount = Math.max(2, dailyGoal - dueCount);
   const { data: newCards } = await supabase
     .from("user_cards")
@@ -47,12 +93,11 @@ export default async function StudyPage() {
     .eq("word.cefr_level", userLevel)
     .eq("times_seen", 0)
     .neq("status", "burned")
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false }) // newest first (just added from setup)
     .limit(newCardCount);
 
   const newCount = newCards?.length || 0;
 
-  // No support cards — strict level lock only
   const queue = [...(dueCards || []), ...(newCards || [])];
 
   // Shuffle

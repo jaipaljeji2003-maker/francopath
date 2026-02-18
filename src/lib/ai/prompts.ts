@@ -260,6 +260,66 @@ Respond ONLY with this JSON shape:
 }
 
 // ═══════════════════════════════════════════════════
+// AI WORD SELECTION — PERSONALIZED DAILY DECK
+// ═══════════════════════════════════════════════════
+
+/**
+ * AI picks personalized words for the user's daily deck
+ * Words are selected from the master vocabulary based on difficulty, exam relevance, and gaps
+ */
+export function wordSelectionPrompt(params: {
+  level: string;
+  count: number;
+  difficulty: "easy" | "medium" | "hard";
+  targetExam: "TCF" | "TEF";
+  nativeLanguages: string[];
+  existingFrenchWords: string[];
+  weakCategories: string[];
+  availableWords: Array<{
+    id: string;
+    french: string;
+    english: string;
+    category: string;
+    tcf_frequency: number;
+    tef_frequency: number;
+  }>;
+}) {
+  const difficultyDesc = {
+    easy: "high frequency (TCF/TEF freq 8-10), common everyday words the student will encounter often",
+    medium: "medium frequency (TCF/TEF freq 5-7), practical vocabulary for daily life and exams",
+    hard: "lower frequency (TCF/TEF freq 1-4), rarer but exam-important words that distinguish higher scores",
+  };
+
+  return `Select exactly ${params.count} French words for a ${params.level} student to learn today.
+
+Student info:
+- Level: ${params.level}
+- Target exam: ${params.targetExam} Canada
+- Languages: ${params.nativeLanguages.join(", ")}
+- Difficulty preference: ${params.difficulty} — ${difficultyDesc[params.difficulty]}
+- Weak categories: ${params.weakCategories.join(", ") || "none identified yet"}
+
+Words they already know (DO NOT select these): ${params.existingFrenchWords.slice(0, 100).join(", ") || "none yet"}
+
+Available words to choose from — pick EXACTLY ${params.count} word IDs from this list:
+${JSON.stringify(params.availableWords)}
+
+Selection strategy:
+- Prioritize words from weak categories to fill knowledge gaps
+- Mix categories for variety (don't pick all words from the same category)
+- For "${params.difficulty}" difficulty, prefer words matching that frequency range
+- Consider which words pair well together thematically for a cohesive study session
+- Favor words important for ${params.targetExam} Canada exam success
+
+Respond ONLY with this JSON:
+{
+  "selected_word_ids": ["uuid1", "uuid2"],
+  "selection_reasoning": "Brief explanation of why these words were chosen",
+  "theme": "Optional thematic connection between the selected words, or null"
+}`;
+}
+
+// ═══════════════════════════════════════════════════
 // WRITING PRACTICE — TCF/TEF TASK STRUCTURE
 // ═══════════════════════════════════════════════════
 

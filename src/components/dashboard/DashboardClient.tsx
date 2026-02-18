@@ -82,7 +82,7 @@ export default function DashboardClient({
         <div className="grid grid-cols-4 gap-3 mb-6 animate-fade-up-delay">
           {[
             { label: "Due", value: stats.dueCount, color: "text-brand-warning", icon: "📋" },
-            { label: "New", value: stats.newCount, color: "text-brand-accent", icon: "✨" },
+            { label: "Queued", value: stats.queuedCount, color: "text-brand-accent", icon: "📝" },
             { label: "Mastered", value: stats.masteredCount, color: "text-brand-success", icon: "🏆" },
             { label: "Accuracy", value: `${stats.accuracy}%`, color: stats.accuracy >= 80 ? "text-brand-success" : "text-brand-warning", icon: "🎯" },
           ].map(stat => (

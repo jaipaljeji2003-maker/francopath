@@ -90,6 +90,20 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Default New Words */}
+        <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 mb-4">
+          <h3 className="font-bold text-sm mb-3">📝 Default New Words</h3>
+          <p className="text-xs text-brand-dim mb-3">How many new words to add per study session by default?</p>
+          <div className="grid grid-cols-6 gap-2">
+            {[0, 3, 5, 8, 10, 15].map(n => (
+              <button key={n} onClick={() => updateField("daily_new_words", n)} disabled={saving}
+                className={`py-2 rounded-xl border text-sm font-semibold transition-all ${
+                  (profile.daily_new_words ?? 5) === n ? "border-brand-accent bg-brand-accent/10 text-brand-accent" : "border-brand-border text-brand-dim hover:border-brand-accent/30"
+                }`}>{n}</button>
+            ))}
+          </div>
+        </div>
+
         {/* Session Size */}
         <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 mb-4">
           <h3 className="font-bold text-sm mb-3">🃏 Session Size</h3>

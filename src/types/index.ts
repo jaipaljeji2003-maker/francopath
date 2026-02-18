@@ -15,6 +15,7 @@ export interface Profile {
   target_exam: ExamType;
   target_exam_date: string | null;
   daily_goal: number;
+  daily_new_words: number;
   session_limit: number | null;
   timezone: string;
   onboarding_complete: boolean;
@@ -101,7 +102,7 @@ export interface PlacementQuestion {
 
 export interface DashboardStats {
   dueCount: number;
-  newCount: number;
+  queuedCount: number;
   masteredCount: number;
   totalCards: number;
   accuracy: number;
