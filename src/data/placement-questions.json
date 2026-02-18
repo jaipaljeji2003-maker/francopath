@@ -1,17 +1,21 @@
 [
-  {"question":"What does 'Bonjour' mean?","options":["Hello","Goodbye","Thank you","Please"],"correct_index":0,"level":"A0"},
-  {"question":"Complete: Je ___ étudiant.","options":["suis","es","est","sommes"],"correct_index":0,"level":"A0"},
-  {"question":"'Chat' in French means:","options":["Dog","Cat","Bird","Fish"],"correct_index":1,"level":"A0"},
-  {"question":"Which is correct? 'J'habite ___ Paris.'","options":["à","en","au","dans"],"correct_index":0,"level":"A1"},
-  {"question":"'Je voudrais un café' means:","options":["I need coffee","I would like a coffee","I make coffee","I drink coffee"],"correct_index":1,"level":"A1"},
-  {"question":"Past tense of 'aller' (je):","options":["je suis allé","j'ai allé","je allais","j'allais"],"correct_index":0,"level":"A1"},
-  {"question":"'Cependant' is closest in meaning to:","options":["Therefore","However","Because","Finally"],"correct_index":1,"level":"A2"},
-  {"question":"Complete: 'Il faut que je ___ (finir)'","options":["finis","finisse","finirai","finissais"],"correct_index":1,"level":"A2"},
-  {"question":"'Malgré la pluie' means:","options":["Because of rain","Despite the rain","After the rain","During rain"],"correct_index":1,"level":"A2"},
-  {"question":"'Éventuellement' in French means:","options":["Eventually","Possibly","Evidently","Frequently"],"correct_index":1,"level":"B1"},
-  {"question":"Choose the correct connector: '___, je pense que c'est vrai.'","options":["Néanmoins","Malgré","Bien que","Pendant que"],"correct_index":0,"level":"B1"},
-  {"question":"'En ce qui concerne' is used to:","options":["Express time","Introduce a topic","Show contrast","Give an example"],"correct_index":1,"level":"B1"},
-  {"question":"'Bien qu'il ___ (être) malade, il travaille.'","options":["est","soit","sera","était"],"correct_index":1,"level":"B2"},
-  {"question":"'Au fur et à mesure' means:","options":["Suddenly","Gradually","Finally","Unfortunately"],"correct_index":1,"level":"B2"},
-  {"question":"'S'avérer' means:","options":["To help","To turn out to be","To disappear","To approve"],"correct_index":1,"level":"B2"}
+  {"question":"What does 'Bonjour' mean?","options":["Hello","Goodbye","Thank you","Please"],"correct_index":0,"level":"A0","skill_tested":"vocabulary"},
+  {"question":"Complete: Je ___ étudiant.","options":["suis","es","est","sommes"],"correct_index":0,"level":"A0","skill_tested":"grammar"},
+  {"question":"'Chat' in French means:","options":["Dog","Cat","Bird","Fish"],"correct_index":1,"level":"A0","skill_tested":"vocabulary"},
+
+  {"question":"Which is correct? 'J'habite ___ Paris.'","options":["à","en","au","dans"],"correct_index":0,"level":"A1","skill_tested":"grammar"},
+  {"question":"'Je voudrais un café' means:","options":["I need coffee","I would like a coffee","I make coffee","I drink coffee"],"correct_index":1,"level":"A1","skill_tested":"vocabulary"},
+  {"question":"Choose the correct form: 'Nous ___ au cinéma hier.'","options":["sommes allés","avons allé","allions","avons été allés"],"correct_index":0,"level":"A1","skill_tested":"grammar"},
+
+  {"question":"Complete: 'Hier, il ___ (pleuvoir) toute la journée.'","options":["a plu","pleuvait","plut","pleuvra"],"correct_index":0,"level":"A2","skill_tested":"grammar"},
+  {"question":"'Cependant' is closest in meaning to:","options":["Therefore","However","Because","Finally"],"correct_index":1,"level":"A2","skill_tested":"vocabulary"},
+  {"question":"'Malgré la pluie, nous sommes sortis' means:","options":["Because of rain, we stayed","Despite the rain, we went out","After the rain, we left","During rain, we returned"],"correct_index":1,"level":"A2","skill_tested":"comprehension"},
+
+  {"question":"'Éventuellement' in French means:","options":["Eventually","Possibly","Evidently","Frequently"],"correct_index":1,"level":"B1","skill_tested":"vocabulary"},
+  {"question":"Complete: 'Il faut que je ___ (finir) ce travail.'","options":["finis","finisse","finirai","finissais"],"correct_index":1,"level":"B1","skill_tested":"grammar"},
+  {"question":"'En ce qui concerne' is used to:","options":["Express time","Introduce a topic","Show contrast","Give an example"],"correct_index":1,"level":"B1","skill_tested":"vocabulary"},
+
+  {"question":"'Bien qu'il ___ (être) malade, il travaille.'","options":["est","soit","sera","était"],"correct_index":1,"level":"B2","skill_tested":"grammar"},
+  {"question":"'Au fur et à mesure' means:","options":["Suddenly","Gradually","Finally","Unfortunately"],"correct_index":1,"level":"B2","skill_tested":"vocabulary"},
+  {"question":"'S'avérer' means:","options":["To help","To turn out to be","To disappear","To approve"],"correct_index":1,"level":"B2","skill_tested":"vocabulary"}
 ]

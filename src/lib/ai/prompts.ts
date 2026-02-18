@@ -363,30 +363,98 @@ export function writingGradePrompt(params: {
   submission: string;
   nativeLanguages: string[];
 }) {
-  return `Grade this ${params.examType} Canada writing submission (Task ${params.taskNumber}) at CEFR ${params.level} level.
+  // Word count for enforcement
+  const wordCount = params.submission.trim().split(/\s+/).filter(Boolean).length;
+
+  // Task-specific minimum word counts
+  const minWords: Record<number, number> = { 1: 60, 2: 120, 3: 180 };
+  const taskMin = minWords[params.taskNumber] || 60;
+
+  return `You are a STRICT ${params.examType} Canada writing examiner. Grade this submission HARSHLY and ACCURATELY.
+
+CRITICAL RULES — READ CAREFULLY:
+1. You are grading for a REAL exam. Be STRICT. Real TCF/TEF examiners are demanding.
+2. NEVER give more than 2/5 on ANY criterion if the submission has fewer than ${taskMin} words. The student wrote ${wordCount} words.
+3. NEVER give a band higher than A2 if there are basic conjugation errors (être/avoir confusion, wrong present tense forms).
+4. NEVER give a band higher than B1 without subjunctive usage, complex connectors (bien que, afin de, malgré), and varied sentence structures.
+5. Count EVERY grammar error. Each error LOWERS the grammar score. 3+ basic errors = max 2/5 grammar.
+6. If the submission doesn't address ALL task requirements, task_completion CANNOT exceed 2/5.
+7. A0-A1 level writing (only present tense, basic vocabulary, simple sentences) can NEVER receive higher than 8/20 regardless of other factors.
+
+STRICT SCORING RUBRIC:
+
+TASK COMPLETION (0-5):
+- 0: Off-topic or incomprehensible
+- 1: Barely addresses the task, missing most requirements
+- 2: Partially addresses task but misses key requirements OR too short (under ${taskMin} words)
+- 3: Addresses main points but lacks detail or misses 1-2 requirements
+- 4: Fully addresses all requirements with adequate detail
+- 5: Exceeds requirements with insightful, thorough coverage
+
+COHERENCE & STRUCTURE (0-5):
+- 0: No logical structure, random sentences
+- 1: Sentences listed without connection, no paragraphs
+- 2: Some basic connectors (et, mais, aussi) but weak structure
+- 3: Clear paragraphs, uses connectors (cependant, de plus, en revanche)
+- 4: Well-structured with varied transitions, logical flow
+- 5: Sophisticated structure with nuanced transitions and rhetoric
+
+VOCABULARY (0-5):
+- 0: Only English words or incomprehensible
+- 1: Very basic words only (être, avoir, faire, aller), constant repetition
+- 2: Limited A1-A2 vocabulary, some repetition, anglicisms
+- 3: Adequate B1 vocabulary, some variety, minor errors in usage
+- 4: Good B2 range, precise word choices, idiomatic expressions
+- 5: Rich, varied vocabulary with nuance, register awareness
+
+GRAMMAR & ACCURACY (0-5):
+- 0: No correct French structures
+- 1: Mostly incorrect, English word order, no conjugation
+- 2: Basic present tense mostly correct, but errors in past tense, agreement, articles
+- 3: Passé composé/imparfait mostly correct, some complex structures, occasional errors
+- 4: Complex grammar (subjunctive, conditional, relative clauses) with few errors
+- 5: Near-native accuracy, sophisticated grammar throughout
+
+BAND ASSIGNMENT (strict thresholds):
+- 0-4/20 → A0 (Pre-beginner)
+- 5-7/20 → A1 (Beginner — basic present tense, simple vocabulary)
+- 8-10/20 → A2 (Elementary — passé composé attempted, daily vocabulary)
+- 11-13/20 → B1 (Intermediate — varied tenses, connectors, opinion expression)
+- 14-16/20 → B1+ to B2- (Upper intermediate — subjunctive, nuanced arguments)
+- 17-18/20 → B2 (Advanced — complex rhetoric, few errors, rich vocabulary)
+- 19-20/20 → B2+ (Near-native writing quality)
 
 Task: ${params.task}
 
-Student's submission:
+Student's submission (${wordCount} words):
 """
 ${params.submission}
 """
 
 Student speaks: ${params.nativeLanguages.join(", ")}
 
-Grade on official ${params.examType} criteria. Be accurate and constructive.
+BEFORE scoring, mentally:
+1. Count the word count. If under ${taskMin}, cap ALL criteria at 2/5.
+2. List every grammar error you find.
+3. Check if every task requirement is addressed.
+4. Identify the highest grammatical structure used correctly.
+5. Then assign scores based on the rubric above.
 
 Respond ONLY with this JSON:
 {
   "overall_score": 14,
   "max_score": 20,
   "band": "B1+",
+  "word_count": ${wordCount},
+  "word_count_met": ${wordCount >= taskMin},
   "criteria_scores": {
-    "task_completion": {"score": 4, "max": 5, "comment": "..."},
-    "coherence": {"score": 3, "max": 5, "comment": "..."},
-    "vocabulary": {"score": 4, "max": 5, "comment": "..."},
-    "grammar": {"score": 3, "max": 5, "comment": "..."}
+    "task_completion": {"score": 4, "max": 5, "comment": "specific justification referencing rubric level"},
+    "coherence": {"score": 3, "max": 5, "comment": "specific justification"},
+    "vocabulary": {"score": 4, "max": 5, "comment": "specific justification"},
+    "grammar": {"score": 3, "max": 5, "comment": "list specific errors found"}
   },
+  "grammar_errors_found": 5,
+  "highest_grammar_structure": "passé composé|imparfait|subjunctive|conditional|etc",
   "strengths": ["strength 1", "strength 2"],
   "errors": [
     {"original": "error text", "correction": "corrected text", "rule": "grammar rule", "category": "grammar|vocabulary|spelling|syntax"}

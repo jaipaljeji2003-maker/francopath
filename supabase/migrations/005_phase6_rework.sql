@@ -73,6 +73,14 @@ BEGIN
   END IF;
 END $$;
 
+-- Add session_limit column to profiles (used by Settings > Session Size)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'session_limit') THEN
+    ALTER TABLE profiles ADD COLUMN session_limit INT;
+  END IF;
+END $$;
+
 -- Note: "burned" status is just a value in user_cards.status TEXT field
 -- No schema change needed — the column already accepts any text value
 -- Burned cards: status = 'burned', excluded from study queries

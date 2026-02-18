@@ -15,11 +15,13 @@ export default async function DashboardPage() {
 
   if (profile && !profile.onboarding_complete) redirect("/placement");
 
-  // Card stats
+  // Card stats — filtered to user's current level only
+  const userLevel = profile?.current_level || "A0";
   const { data: cards } = await supabase
     .from("user_cards")
-    .select("id, status, next_review, times_seen, times_correct, times_wrong")
-    .eq("user_id", user.id);
+    .select("id, status, next_review, times_seen, times_correct, times_wrong, word:words!inner(cefr_level)")
+    .eq("user_id", user.id)
+    .eq("word.cefr_level", userLevel);
 
   const now = new Date().toISOString();
   const allCards = cards || [];

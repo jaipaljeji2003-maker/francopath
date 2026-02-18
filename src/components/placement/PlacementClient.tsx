@@ -73,13 +73,27 @@ export default function PlacementClient({ userId, userName, isRetake }: Props) {
       setStartTime(Date.now());
     } else {
       const score = newAnswers.filter(a => a.correct).length;
-      const pct = (score / questions.length) * 100;
-      let level: CEFRLevel;
-      if (pct >= 85) level = "B2";
-      else if (pct >= 70) level = "B1";
-      else if (pct >= 50) level = "A2";
-      else if (pct >= 30) level = "A1";
-      else level = "A0";
+
+      // Level-aware placement: find the highest level where user got ≥2/3 correct
+      const levelOrder: CEFRLevel[] = ["A0", "A1", "A2", "B1", "B2"];
+      const scoreByLevel: Record<string, { correct: number; total: number }> = {};
+      newAnswers.forEach((a, i) => {
+        const qLevel = questions[i]?.level || "A0";
+        if (!scoreByLevel[qLevel]) scoreByLevel[qLevel] = { correct: 0, total: 0 };
+        scoreByLevel[qLevel].total++;
+        if (a.correct) scoreByLevel[qLevel].correct++;
+      });
+
+      // Find highest level where user answered at least 2/3 correctly
+      let level: CEFRLevel = "A0";
+      for (const lvl of levelOrder) {
+        const s = scoreByLevel[lvl];
+        if (s && s.total > 0 && s.correct / s.total >= 0.65) {
+          level = lvl;
+        } else {
+          break; // Stop at first level they struggle with
+        }
+      }
       setResult({ level, score });
       setStep("result");
 
