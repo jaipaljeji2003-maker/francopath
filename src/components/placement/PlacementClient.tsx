@@ -85,14 +85,30 @@ export default function PlacementClient({ userId, userName, isRetake }: Props) {
       });
 
       // Find highest level where user answered at least 2/3 correctly
+      // DON'T break — a tricky low-level question shouldn't cap you at A0
       let level: CEFRLevel = "A0";
+      let passedLevels = 0;
       for (const lvl of levelOrder) {
         const s = scoreByLevel[lvl];
         if (s && s.total > 0 && s.correct / s.total >= 0.65) {
           level = lvl;
-        } else {
-          break; // Stop at first level they struggle with
+          passedLevels++;
         }
+      }
+
+      // Sanity check: if user got 50%+ overall but landed on A0,
+      // they likely know more than A0 — bump to at least A1
+      const overallPct = score / questions.length;
+      if (level === "A0" && overallPct >= 0.5 && passedLevels <= 1) {
+        // Check if they passed ANY level above A0
+        for (const lvl of levelOrder.slice(1)) {
+          const s = scoreByLevel[lvl];
+          if (s && s.total > 0 && s.correct / s.total >= 0.5) {
+            level = lvl; // Give credit for partial knowledge
+          }
+        }
+        // If still A0 after that, at least bump to A1 with 50%+ overall
+        if (level === "A0") level = "A1";
       }
       setResult({ level, score });
       setStep("result");
