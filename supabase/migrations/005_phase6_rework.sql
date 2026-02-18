@@ -28,12 +28,36 @@ CREATE TABLE IF NOT EXISTS daily_activity (
   cards_reviewed INT DEFAULT 0,
   cards_correct INT DEFAULT 0,
   new_cards_seen INT DEFAULT 0,
-  time_spent_seconds INT DEFAULT 0,
+  study_minutes INT DEFAULT 0,
+  sessions_count INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, activity_date)
 );
 
+-- Ensure correct columns exist (handles schema differences between migration versions)
+DO $$
+BEGIN
+  -- If old column name exists, rename it; otherwise add the correct column
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_activity' AND column_name = 'time_spent_seconds') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_activity' AND column_name = 'study_minutes') THEN
+      ALTER TABLE daily_activity RENAME COLUMN time_spent_seconds TO study_minutes;
+    ELSE
+      ALTER TABLE daily_activity DROP COLUMN time_spent_seconds;
+    END IF;
+  ELSIF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_activity' AND column_name = 'study_minutes') THEN
+    ALTER TABLE daily_activity ADD COLUMN study_minutes INT DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'daily_activity' AND column_name = 'sessions_count') THEN
+    ALTER TABLE daily_activity ADD COLUMN sessions_count INT DEFAULT 0;
+  END IF;
+END $$;
+
 ALTER TABLE daily_activity ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users manage own activity" ON daily_activity FOR ALL USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users manage own activity" ON daily_activity FOR ALL USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add streak columns to profiles if missing
 DO $$

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { calculateSRS } from "@/lib/srs/sm2";
@@ -107,6 +107,9 @@ export default function StudyClient({
     return word.english;
   }, [showLang]);
 
+  // Use a ref to track stats reliably (avoids React state batching issues in finishSession)
+  const statsRef = useRef({ correct: 0, total: 0, burned: 0 });
+
   // BURN a card — too easy, remove from rotation
   const handleBurn = async () => {
     if (!card || animating) return;
@@ -117,6 +120,8 @@ export default function StudyClient({
       .update({ status: "burned", interval_days: 999 })
       .eq("id", card.id);
 
+    statsRef.current.burned++;
+    statsRef.current.total++;
     setSessionStats(prev => ({ ...prev, burned: prev.burned + 1, total: prev.total + 1 }));
     advanceCard();
   };
@@ -140,6 +145,7 @@ export default function StudyClient({
       isCorrect
     ) {
       finalStatus = "burned";
+      statsRef.current.burned++;
       setSessionStats(prev => ({ ...prev, burned: prev.burned + 1 }));
     }
 
@@ -154,6 +160,8 @@ export default function StudyClient({
       await supabase.from("card_reviews").insert({ user_id: userId, user_card_id: card.id, session_id: sessionId, quality });
     }
 
+    statsRef.current.total++;
+    if (isCorrect) statsRef.current.correct++;
     setSessionStats(prev => ({ ...prev, correct: prev.correct + (isCorrect ? 1 : 0), total: prev.total + 1 }));
     advanceCard();
   };
@@ -169,8 +177,9 @@ export default function StudyClient({
   const finishSession = async () => {
     if (sessionId) {
       const duration = Math.round((Date.now() - sessionStats.started) / 1000);
-      const finalTotal = sessionStats.total + 1;
-      const finalCorrect = sessionStats.correct + 1;
+      // Use ref values which are synchronously updated (not subject to React batching)
+      const finalTotal = statsRef.current.total;
+      const finalCorrect = statsRef.current.correct;
       await supabase.from("study_sessions").update({
         ended_at: new Date().toISOString(), cards_reviewed: finalTotal,
         cards_correct: finalCorrect, duration_seconds: duration,
@@ -230,7 +239,7 @@ export default function StudyClient({
           </div>
 
           <div className="flex gap-3 animate-fade-up-delay">
-            <button onClick={() => router.push("/study")} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-brand-accent to-purple-500 text-white font-bold text-sm">Study More</button>
+            <button onClick={() => window.location.href = "/study"} className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-brand-accent to-purple-500 text-white font-bold text-sm">Study More</button>
             <button onClick={() => router.push("/dashboard")} className="flex-1 py-3.5 rounded-xl border border-brand-border bg-brand-surface text-sm font-semibold">Dashboard</button>
           </div>
         </div>
