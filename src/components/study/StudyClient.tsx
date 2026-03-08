@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { calculateSRS } from "@/lib/srs/sm2";
 import { usePronounce } from "@/hooks/usePronounce";
 import type { TranslationLang } from "@/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 interface MnemonicData {
   mnemonic: string;
@@ -42,6 +43,24 @@ interface CardWithWord {
   };
 }
 
+const RATING_STYLES = {
+  "1": "border-brand-error/30 bg-brand-error/5 text-brand-error hover:bg-brand-error/15",
+  "2": "border-brand-warning/30 bg-brand-warning/5 text-brand-warning hover:bg-brand-warning/15",
+  "4": "border-brand-accent/30 bg-brand-accent/5 text-brand-accent hover:bg-brand-accent/15",
+  "5": "border-brand-success/30 bg-brand-success/5 text-brand-success hover:bg-brand-success/15",
+  "-1": "border-brand-gold/30 bg-brand-gold/5 text-brand-gold hover:bg-brand-gold/15",
+} as const;
+
+let browserSupabase: SupabaseClient | null = null;
+
+function getBrowserSupabaseClient() {
+  if (!browserSupabase) {
+    browserSupabase = createClient();
+  }
+
+  return browserSupabase;
+}
+
 export default function StudyClient({
   cards,
   userId,
@@ -63,7 +82,7 @@ export default function StudyClient({
   const [showLang, setShowLang] = useState<TranslationLang>(preferredLang);
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(null);
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = getBrowserSupabaseClient();
   const { speak } = usePronounce();
 
   const fetchMnemonic = useCallback(async () => {
@@ -357,7 +376,7 @@ export default function StudyClient({
                   key={r.q}
                   onClick={() => r.q === -1 ? handleBurn() : handleRate(r.q)}
                   disabled={animating}
-                  className={`py-3 rounded-2xl border border-${r.color}/30 bg-${r.color}/5 text-${r.color} text-xs font-bold flex flex-col items-center gap-1 hover:bg-${r.color}/15 hover:scale-105 transition-all disabled:opacity-50`}
+                  className={`py-3 rounded-2xl border text-xs font-bold flex flex-col items-center gap-1 hover:scale-105 transition-all disabled:opacity-50 ${RATING_STYLES[String(r.q) as keyof typeof RATING_STYLES]}`}
                 >
                   <span className="text-xl">{r.emoji}</span>
                   <span>{r.label}</span>

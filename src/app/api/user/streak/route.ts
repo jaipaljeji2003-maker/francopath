@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+function getTorontoDateString(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { cardsReviewed, cardsCorrect, durationSeconds } = await req.json();
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTorontoDateString(new Date());
 
   // Upsert daily activity
   const { data: existing } = await supabase

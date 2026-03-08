@@ -32,8 +32,13 @@ export async function updateSession(request: NextRequest) {
   // Redirect unauthenticated users to login (except public pages)
   const publicPaths = ["/", "/login", "/signup", "/auth/callback"];
   const isPublic = publicPaths.some((p) => request.nextUrl.pathname === p);
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
 
   if (!user && !isPublic) {
+    if (isApiRoute) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

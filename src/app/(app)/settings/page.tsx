@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -24,14 +24,14 @@ export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/login"); return; }
     const { data: p } = await supabase.from("profiles").select("*").eq("id", user.id).single();
     setProfile(p);
-  };
+  }, [router, supabase]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const updateField = async (field: string, value: any) => {
     setSaving(true);
