@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import StudyClient from "@/components/study/StudyClient";
 import StudySetup from "@/components/study/StudySetup";
+import { getDeckPlanForUser } from "@/lib/study/deck-plan";
+import { buildPersonalizedStudyQueue } from "@/lib/study/queue";
 
 export default async function StudyPage({
   searchParams,
@@ -21,37 +23,51 @@ export default async function StudyPage({
   if (!profile?.onboarding_complete) redirect("/placement");
 
   const dailyGoal = profile.daily_goal || 10;
+  const sessionLimit =
+    profile.session_limit === 999
+      ? 150
+      : profile.session_limit || dailyGoal;
   const userLevel = profile.current_level || "A1";
   const params = await searchParams;
   const isReady = params.ready === "1";
 
-  // ─── SETUP MODE: show pre-session page ───
+  const deckPlanResult = await getDeckPlanForUser({
+    supabase,
+    userId: user.id,
+    currentLevel: userLevel,
+  });
+
   if (!isReady) {
     const now = new Date().toISOString();
+    const setupLevels = Array.from(
+      new Set(
+        [deckPlanResult.plan.levelBand.primary, deckPlanResult.plan.levelBand.support]
+          .filter(Boolean)
+      )
+    ) as string[];
 
-    // Count due review cards at user's level
     const { count: dueCardCount } = await supabase
       .from("user_cards")
-      .select("id, word:words!inner(cefr_level)", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
-      .eq("word.cefr_level", userLevel)
       .lte("next_review", now)
       .gt("times_seen", 0)
       .neq("status", "burned");
 
-    // Count available new words (words at level NOT in user_cards)
-    const { count: totalWordsAtLevel } = await supabase
+    const { data: setupWordInventory } = await supabase
       .from("words")
-      .select("id", { count: "exact", head: true })
-      .eq("cefr_level", userLevel);
+      .select("id, cefr_level")
+      .in("cefr_level", setupLevels);
 
-    const { count: userCardsAtLevel } = await supabase
+    const { data: setupUserCards } = await supabase
       .from("user_cards")
-      .select("id, word:words!inner(cefr_level)", { count: "exact", head: true })
+      .select("word:words!inner(cefr_level)")
       .eq("user_id", user.id)
-      .eq("word.cefr_level", userLevel);
+      .in("word.cefr_level", setupLevels);
 
-    const availableNewWordCount = (totalWordsAtLevel || 0) - (userCardsAtLevel || 0);
+    const totalWordsInBand = (setupWordInventory || []).length;
+    const userCardsInBand = (setupUserCards || []).length;
+    const availableNewWordCount = Math.max(0, totalWordsInBand - userCardsInBand);
 
     return (
       <StudySetup
@@ -59,7 +75,7 @@ export default async function StudyPage({
         userLevel={userLevel}
         targetExam={profile.target_exam || "TCF"}
         dueCardCount={dueCardCount || 0}
-        availableNewWordCount={Math.max(0, availableNewWordCount)}
+        availableNewWordCount={availableNewWordCount}
         defaultNewWords={profile.daily_new_words ?? 5}
         dailyGoal={dailyGoal}
         preferredLang={profile.preferred_translation || "en"}
@@ -67,52 +83,49 @@ export default async function StudyPage({
     );
   }
 
-  // ─── STUDY MODE: serve cards ───
   const now = new Date().toISOString();
+  const fetchLimit = Math.min(Math.max(sessionLimit * 4, 40), 300);
 
-  // 1. Due cards at user's level (review cards that need revisiting)
   const { data: dueCards } = await supabase
     .from("user_cards")
     .select("*, word:words!inner(*)")
     .eq("user_id", user.id)
-    .eq("word.cefr_level", userLevel)
     .lte("next_review", now)
     .gt("times_seen", 0)
     .neq("status", "burned")
-    .order("next_review", { ascending: true })
-    .limit(dailyGoal);
+    .limit(fetchLimit);
 
-  const dueCount = dueCards?.length || 0;
-
-  // 2. New cards at user's level (recently added, unseen vocab)
-  const newCardCount = Math.max(2, dailyGoal - dueCount);
   const { data: newCards } = await supabase
     .from("user_cards")
     .select("*, word:words!inner(*)")
     .eq("user_id", user.id)
-    .eq("word.cefr_level", userLevel)
     .eq("times_seen", 0)
     .neq("status", "burned")
-    .order("created_at", { ascending: false }) // newest first (just added from setup)
-    .limit(newCardCount);
+    .order("created_at", { ascending: false })
+    .limit(fetchLimit);
 
-  const newCount = newCards?.length || 0;
+  const queue = buildPersonalizedStudyQueue({
+    dueCards: (dueCards || []) as any[],
+    newCards: (newCards || []) as any[],
+    maxCards: sessionLimit,
+    examType: profile.target_exam || "TCF",
+    currentLevel: userLevel,
+    plan: deckPlanResult.plan,
+  });
 
-  const queue = [...(dueCards || []), ...(newCards || [])];
-
-  // Shuffle
-  for (let i = queue.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [queue[i], queue[j]] = [queue[j], queue[i]];
-  }
+  const reviewCount = queue.filter((card) => card.times_seen > 0).length;
+  const newCount = queue.filter((card) => card.times_seen === 0).length;
+  const levelBandSummary = deckPlanResult.plan.levelBand.support
+    ? `${deckPlanResult.plan.levelBand.primary} + ${deckPlanResult.plan.levelBand.support} support`
+    : deckPlanResult.plan.levelBand.primary;
 
   return (
     <StudyClient
-      cards={queue.slice(0, dailyGoal)}
+      cards={queue as any[]}
       userId={user.id}
       preferredLang={profile.preferred_translation || "en"}
       dailyGoal={dailyGoal}
-      deckPlanSummary={`Studying: ${userLevel} only · ${dueCount} review + ${newCount} new`}
+      deckPlanSummary={`Plan: ${levelBandSummary} · ${reviewCount} review + ${newCount} new · ${deckPlanResult.plan.rationale}`}
     />
   );
 }

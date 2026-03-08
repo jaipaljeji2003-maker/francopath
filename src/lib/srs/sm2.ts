@@ -1,13 +1,11 @@
 /**
- * SM-2 Spaced Repetition Algorithm
- * Adapted for FrancoPath TCF/TEF preparation
+ * FrancoPath review scheduler.
  *
- * Quality ratings:
- * 1 = Forgot completely (blackout)
- * 2 = Hard (wrong but recognized after seeing answer)
- * 3 = Okay (correct but with difficulty)
- * 4 = Good (correct with some hesitation)
- * 5 = Easy (instant recall)
+ * This keeps the familiar SM-2 style ease factor, but adds:
+ * - a distinct "barely knew it" lane
+ * - same-day relearning steps for lapses
+ * - softer interval growth for shaky recalls
+ * - overdue bonus for cards remembered after waiting longer than planned
  */
 
 export interface SRSData {
@@ -23,48 +21,69 @@ export interface SRSResult extends SRSData {
   status: "new" | "learning" | "review" | "mastered";
 }
 
+function scheduleFromNow(minutesFromNow: number) {
+  return new Date(Date.now() + minutesFromNow * 60 * 1000).toISOString();
+}
+
+function scheduleFromDays(daysFromNow: number) {
+  return new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export function calculateSRS(
   current: SRSData,
   quality: number // 1-5
 ): SRSResult {
   let { easeFactor, intervalDays, repetition } = current;
   const isCorrect = quality >= 3;
+  const overdueDays = Math.max(
+    0,
+    (Date.now() - new Date(current.nextReview).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const overdueBonus =
+    intervalDays > 0
+      ? 1 + Math.min(0.35, overdueDays / Math.max(10, intervalDays * 4))
+      : 1;
+  let nextReview = current.nextReview;
 
-  if (isCorrect) {
-    // Correct answer — increase interval
-    if (repetition === 0) {
-      intervalDays = 1;
-    } else if (repetition === 1) {
-      intervalDays = 3;
-    } else {
-      intervalDays = Math.round(intervalDays * easeFactor);
-    }
-    repetition++;
-  } else {
-    // Wrong — reset to beginning
+  if (!isCorrect) {
     repetition = 0;
-    intervalDays = 1;
+
+    if (quality <= 1) {
+      intervalDays = 0;
+      nextReview = scheduleFromNow(10);
+      easeFactor = Math.max(1.3, easeFactor - 0.28);
+    } else {
+      intervalDays = 0;
+      nextReview = scheduleFromNow(12 * 60);
+      easeFactor = Math.max(1.3, easeFactor - 0.18);
+    }
+  } else {
+    if (quality === 3) {
+      if (repetition === 0) intervalDays = 1;
+      else if (repetition === 1) intervalDays = 2;
+      else intervalDays = Math.max(1, Math.round(intervalDays * Math.max(1.2, easeFactor - 0.15) * overdueBonus));
+      easeFactor = Math.max(1.3, easeFactor - 0.05);
+    } else if (quality === 4) {
+      if (repetition === 0) intervalDays = 2;
+      else if (repetition === 1) intervalDays = 4;
+      else intervalDays = Math.max(1, Math.round(intervalDays * easeFactor * overdueBonus));
+      easeFactor = Math.max(1.3, easeFactor + 0.03);
+    } else {
+      if (repetition === 0) intervalDays = 3;
+      else if (repetition === 1) intervalDays = 6;
+      else intervalDays = Math.max(1, Math.round(intervalDays * (easeFactor + 0.2) * 1.15 * overdueBonus));
+      easeFactor = Math.max(1.3, easeFactor + 0.1);
+    }
+
+    repetition += 1;
+    intervalDays = Math.min(intervalDays, 365);
+    nextReview = scheduleFromDays(intervalDays);
   }
 
-  // Update ease factor (minimum 1.3)
-  easeFactor = Math.max(
-    1.3,
-    easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-  );
-
-  // Cap interval at 180 days
-  intervalDays = Math.min(intervalDays, 180);
-
-  // Calculate next review date
-  const nextReview = new Date(
-    Date.now() + intervalDays * 24 * 60 * 60 * 1000
-  ).toISOString();
-
-  // Determine card status
   let status: SRSResult["status"];
-  if (repetition === 0) status = "learning";
-  else if (repetition >= 5 && easeFactor >= 2.0) status = "mastered";
-  else if (intervalDays >= 7) status = "review";
+  if (!isCorrect || intervalDays < 3) status = "learning";
+  else if (repetition >= 6 && easeFactor >= 2.45 && intervalDays >= 21) status = "mastered";
+  else if (intervalDays >= 3) status = "review";
   else status = "learning";
 
   return {
@@ -79,7 +98,8 @@ export function calculateSRS(
 }
 
 /**
- * Build an optimized review queue based on user's progress
+ * Legacy helper for simple queue building in places that still use it.
+ * The study page now uses a richer queue builder in /lib/study/queue.
  */
 export function buildReviewQueue(
   cards: Array<{
@@ -98,7 +118,6 @@ export function buildReviewQueue(
   const { maxCards = 10, accuracy = 75 } = options;
   const now = new Date().toISOString();
 
-  // Separate due and new cards
   const dueCards = cards
     .filter((c) => c.nextReview <= now && c.timesSeen > 0)
     .sort((a, b) => a.nextReview.localeCompare(b.nextReview));
@@ -107,21 +126,9 @@ export function buildReviewQueue(
     .filter((c) => c.timesSeen === 0)
     .sort(() => Math.random() - 0.5);
 
-  // Adaptive ratio: more review if accuracy is low
-  const newRatio = accuracy >= 80 ? 0.4 : accuracy >= 60 ? 0.25 : 0.15;
+  const newRatio = accuracy >= 85 ? 0.3 : accuracy >= 70 ? 0.2 : 0.1;
   const newCount = Math.round(maxCards * newRatio);
   const reviewCount = maxCards - newCount;
 
-  const queue = [
-    ...dueCards.slice(0, reviewCount),
-    ...newCards.slice(0, newCount),
-  ];
-
-  // Shuffle the queue
-  for (let i = queue.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [queue[i], queue[j]] = [queue[j], queue[i]];
-  }
-
-  return queue.slice(0, maxCards);
+  return [...dueCards.slice(0, reviewCount), ...newCards.slice(0, newCount)].slice(0, maxCards);
 }

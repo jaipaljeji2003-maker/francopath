@@ -273,21 +273,30 @@ export function wordSelectionPrompt(params: {
   difficulty: "easy" | "medium" | "hard";
   targetExam: "TCF" | "TEF";
   nativeLanguages: string[];
+  overallAccuracy: number | null;
+  candidateLevels: string[];
+  challengeMode: "support" | "core" | "stretch";
+  targetExamDate?: string | null;
   existingFrenchWords: string[];
   weakCategories: string[];
+  writingWeaknesses: string[];
   availableWords: Array<{
     id: string;
     french: string;
     english: string;
+    cefr_level: string;
     category: string;
+    part_of_speech: string | null;
     tcf_frequency: number;
     tef_frequency: number;
+    false_friend_warning: string | null;
+    example_sentence: string | null;
   }>;
 }) {
   const difficultyDesc = {
-    easy: "high frequency (TCF/TEF freq 8-10), common everyday words the student will encounter often",
-    medium: "medium frequency (TCF/TEF freq 5-7), practical vocabulary for daily life and exams",
-    hard: "lower frequency (TCF/TEF freq 1-4), rarer but exam-important words that distinguish higher scores",
+    easy: "stabilize with high-frequency, high-value words that make review smoother without wasting slots",
+    medium: "exam-core words that are practical, reusable, and likely to pay off soon",
+    hard: "stretch words with strong exam value, nuance, traps, or higher-level payoff",
   };
 
   return `Select exactly ${params.count} French words for a ${params.level} student to learn today.
@@ -296,8 +305,13 @@ Student info:
 - Level: ${params.level}
 - Target exam: ${params.targetExam} Canada
 - Languages: ${params.nativeLanguages.join(", ")}
+- Target exam date: ${params.targetExamDate || "not set"}
+- Overall review accuracy: ${params.overallAccuracy ?? "unknown"}%
 - Difficulty preference: ${params.difficulty} — ${difficultyDesc[params.difficulty]}
 - Weak categories: ${params.weakCategories.join(", ") || "none identified yet"}
+- Candidate CEFR levels for today's new cards: ${params.candidateLevels.join(", ")}
+- Session mode: ${params.challengeMode}
+- Writing/exam weaknesses: ${params.writingWeaknesses.join(", ") || "none identified yet"}
 
 Words they already know (DO NOT select these): ${params.existingFrenchWords.slice(0, 100).join(", ") || "none yet"}
 
@@ -305,11 +319,14 @@ Available words to choose from — pick EXACTLY ${params.count} word IDs from th
 ${JSON.stringify(params.availableWords)}
 
 Selection strategy:
-- Prioritize words from weak categories to fill knowledge gaps
-- Mix categories for variety (don't pick all words from the same category)
-- For "${params.difficulty}" difficulty, prefer words matching that frequency range
-- Consider which words pair well together thematically for a cohesive study session
-- Favor words important for ${params.targetExam} Canada exam success
+- Prioritize words that will genuinely improve exam performance, writing precision, or comprehension
+- Use weak categories and writing weaknesses as signals for what the student is missing
+- Avoid wasting slots on filler or ultra-basic words unless the profile clearly requires them
+- Mix categories for variety, but keep the set cohesive enough to feel intentional
+- Prefer words with high reuse value in TCF/TEF tasks, not isolated trivia
+- For "${params.difficulty}" difficulty, calibrate challenge carefully: no sloppy easy picks, no impossible jumps
+- If a word has a false-friend trap or nuance that often hurts exam learners, that is a plus
+- It is acceptable to include some harder words if they offer strong exam leverage
 
 Respond ONLY with this JSON:
 {
