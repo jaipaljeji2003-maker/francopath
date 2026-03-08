@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { callClaude } from "@/lib/ai/claude";
 import { wordSelectionPrompt } from "@/lib/ai/prompts";
 import { compareStudyLevels, getAdjacentLevel, getLevelDistance, normalizeStudyLevel } from "@/lib/study/levels";
+import { extractWritingFocusSignals } from "@/lib/study/review-focus";
 
 type Difficulty = "easy" | "medium" | "hard";
 type CandidateMode = "support" | "core" | "stretch";
@@ -112,52 +113,6 @@ function getWeakCategories(cardStats: CardStatRow[]) {
     .map(([category]) => category);
 }
 
-function extractWritingWeaknesses(drills: Array<{ ai_grading: any }> | null) {
-  const weaknessCounts = new Map<string, number>();
-
-  for (const drill of drills || []) {
-    const grading = drill.ai_grading;
-    if (!grading || typeof grading !== "object") continue;
-
-    const criteriaScores = grading.criteria_scores;
-    if (criteriaScores && typeof criteriaScores === "object") {
-      for (const [criterion, value] of Object.entries(criteriaScores)) {
-        const score = typeof value === "object" && value && "score" in value ? Number((value as any).score) : NaN;
-        if (Number.isFinite(score) && score <= 2) {
-          weaknessCounts.set(criterion.replace(/_/g, " "), (weaknessCounts.get(criterion.replace(/_/g, " ")) || 0) + 2);
-        }
-      }
-    }
-
-    if (Array.isArray(grading.errors)) {
-      for (const error of grading.errors) {
-        const label =
-          error?.category ||
-          error?.rule ||
-          error?.original ||
-          null;
-
-        if (typeof label === "string" && label.trim()) {
-          weaknessCounts.set(label.trim(), (weaknessCounts.get(label.trim()) || 0) + 1);
-        }
-      }
-    }
-
-    if (Array.isArray(grading.vocab_to_review)) {
-      for (const item of grading.vocab_to_review) {
-        if (typeof item === "string" && item.trim()) {
-          weaknessCounts.set(`vocab: ${item.trim()}`, (weaknessCounts.get(`vocab: ${item.trim()}`) || 0) + 1);
-        }
-      }
-    }
-  }
-
-  return Array.from(weaknessCounts.entries())
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 6)
-    .map(([label]) => label);
-}
-
 function getDifficultyWeight(word: WordCandidate, difficulty: Difficulty, targetExam: "TCF" | "TEF") {
   const frequency = targetExam === "TCF" ? word.tcf_frequency : word.tef_frequency;
 
@@ -179,14 +134,16 @@ function scoreCandidateWord(params: {
   currentLevel: string;
   weakCategories: string[];
   challengeMode: CandidateMode;
+  targetReviewWords?: string[];
 }) {
-  const { word, difficulty, targetExam, currentLevel, weakCategories, challengeMode } = params;
+  const { word, difficulty, targetExam, currentLevel, weakCategories, challengeMode, targetReviewWords = [] } = params;
   const frequency = targetExam === "TCF" ? word.tcf_frequency : word.tef_frequency;
   const weakCategoryBoost = weakCategories.includes(word.category) ? 14 : 0;
   const levelDistance = getLevelDistance(word.cefr_level, currentLevel);
   const falseFriendBoost = word.false_friend_warning ? 9 : 0;
   const sentenceBoost = word.example_sentence ? 4 : 0;
   const partOfSpeechBoost = word.part_of_speech && !["interjection", "article"].includes(word.part_of_speech) ? 4 : 0;
+  const reviewWordBoost = targetReviewWords.includes(word.french.toLowerCase()) ? 16 : 0;
   const sloppyEasyPenalty =
     difficulty !== "easy" &&
     ["greetings", "numbers", "months", "days", "colors"].includes(word.category.toLowerCase())
@@ -201,6 +158,7 @@ function scoreCandidateWord(params: {
   return (
     getDifficultyWeight(word, difficulty, targetExam) +
     weakCategoryBoost +
+    reviewWordBoost +
     falseFriendBoost +
     sentenceBoost +
     partOfSpeechBoost +
@@ -219,6 +177,7 @@ function fallbackWordSelection(params: {
   currentLevel: string;
   weakCategories: string[];
   challengeMode: CandidateMode;
+  targetReviewWords?: string[];
 }) {
   const rankedWords = [...params.availableWords].sort(
     (left, right) =>
@@ -229,6 +188,7 @@ function fallbackWordSelection(params: {
         currentLevel: params.currentLevel,
         weakCategories: params.weakCategories,
         challengeMode: params.challengeMode,
+        targetReviewWords: params.targetReviewWords,
       }) -
       scoreCandidateWord({
         word: left,
@@ -237,6 +197,7 @@ function fallbackWordSelection(params: {
         currentLevel: params.currentLevel,
         weakCategories: params.weakCategories,
         challengeMode: params.challengeMode,
+        targetReviewWords: params.targetReviewWords,
       })
   );
 
@@ -353,7 +314,11 @@ export async function POST(req: NextRequest) {
     .order("completed_at", { ascending: false })
     .limit(5);
 
-  const writingWeaknesses = extractWritingWeaknesses(recentWritingDrills as Array<{ ai_grading: any }> | null);
+  const writingSignals = extractWritingFocusSignals(recentWritingDrills as Array<{ ai_grading: any }> | null);
+  const writingWeaknesses = [
+    ...writingSignals.weaknessLabels,
+    ...writingSignals.vocabToReview.map((word) => `vocab: ${word}`),
+  ].slice(0, 8);
 
   const rankedCandidatePool = [...availableWords]
     .sort(
@@ -365,6 +330,7 @@ export async function POST(req: NextRequest) {
           currentLevel: profile.current_level || "A1",
           weakCategories,
           challengeMode,
+          targetReviewWords: writingSignals.vocabToReview,
         }) -
         scoreCandidateWord({
           word: left,
@@ -373,6 +339,7 @@ export async function POST(req: NextRequest) {
           currentLevel: profile.current_level || "A1",
           weakCategories,
           challengeMode,
+          targetReviewWords: writingSignals.vocabToReview,
         })
     )
     .slice(0, 80);
@@ -426,6 +393,7 @@ export async function POST(req: NextRequest) {
       currentLevel: profile.current_level || "A1",
       weakCategories,
       challengeMode,
+      targetReviewWords: writingSignals.vocabToReview,
     });
     reasoning = "Selected from the highest-value candidate pool using exam frequency, weak areas, and challenge fit.";
   }

@@ -4,6 +4,7 @@ import StudyClient from "@/components/study/StudyClient";
 import StudySetup from "@/components/study/StudySetup";
 import { getDeckPlanForUser } from "@/lib/study/deck-plan";
 import { buildPersonalizedStudyQueue } from "@/lib/study/queue";
+import { extractWritingFocusSignals } from "@/lib/study/review-focus";
 
 export default async function StudyPage({
   searchParams,
@@ -86,6 +87,18 @@ export default async function StudyPage({
   const now = new Date().toISOString();
   const fetchLimit = Math.min(Math.max(sessionLimit * 4, 40), 300);
 
+  const { data: recentWritingDrills } = await supabase
+    .from("exam_drills")
+    .select("ai_grading")
+    .eq("user_id", user.id)
+    .eq("drill_type", "writing")
+    .order("completed_at", { ascending: false })
+    .limit(5);
+
+  const reviewFocus = extractWritingFocusSignals(
+    recentWritingDrills as Array<{ ai_grading: any }> | null
+  );
+
   const { data: dueCards } = await supabase
     .from("user_cards")
     .select("*, word:words!inner(*)")
@@ -111,6 +124,7 @@ export default async function StudyPage({
     examType: profile.target_exam || "TCF",
     currentLevel: userLevel,
     plan: deckPlanResult.plan,
+    reviewFocus,
   });
 
   const reviewCount = queue.filter((card) => card.times_seen > 0).length;
@@ -125,7 +139,7 @@ export default async function StudyPage({
       userId={user.id}
       preferredLang={profile.preferred_translation || "en"}
       dailyGoal={dailyGoal}
-      deckPlanSummary={`Plan: ${levelBandSummary} · ${reviewCount} review + ${newCount} new · ${deckPlanResult.plan.rationale}`}
+      deckPlanSummary={`Plan: ${levelBandSummary} · ${reviewCount} review + ${newCount} new · ${deckPlanResult.plan.rationale}${reviewFocus.vocabToReview.length ? ` · Writing focus: ${reviewFocus.vocabToReview.slice(0, 2).join(", ")}` : ""}`}
     />
   );
 }

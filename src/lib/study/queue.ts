@@ -2,6 +2,7 @@ import type { DeckPlan } from "@/lib/study/deck-plan";
 import { getLevelDistance, normalizeStudyLevel } from "@/lib/study/levels";
 
 type QueueWord = {
+  french?: string;
   cefr_level: string;
   category: string;
   tcf_frequency?: number | null;
@@ -22,6 +23,11 @@ export type QueueCard = {
   status: string;
   word: QueueWord;
 };
+
+interface ReviewFocus {
+  weaknessLabels?: string[];
+  vocabToReview?: string[];
+}
 
 function normalizeTag(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ");
@@ -45,12 +51,14 @@ function scoreDueCard(
   card: QueueCard,
   examType: "TCF" | "TEF",
   currentLevel: string,
-  focusTags: Set<string>
+  focusTags: Set<string>,
+  reviewWords: Set<string>
 ) {
   const overdueDays = getOverdueDays(card.next_review);
   const lapseRate = card.times_seen > 0 ? card.times_wrong / card.times_seen : 0;
   const levelDistance = getLevelDistance(card.word.cefr_level, currentLevel);
   const category = normalizeTag(card.word.category);
+  const isTargetReviewWord = reviewWords.has(card.word.french?.toLowerCase?.() || "");
   const categoryBoost = focusTags.has(category) ? 10 : 0;
   const falseFriendBoost = card.word.false_friend_warning ? 6 : 0;
   const frequencyBoost = getExamFrequency(card, examType) * 1.8;
@@ -58,6 +66,7 @@ function scoreDueCard(
   const lapseBoost = lapseRate * 35;
   const urgencyBoost = overdueDays * 22;
   const levelPenalty = levelDistance * 4;
+  const targetWordBoost = isTargetReviewWord ? 18 : 0;
 
   return (
     urgencyBoost +
@@ -65,6 +74,7 @@ function scoreDueCard(
     easePenalty +
     frequencyBoost +
     categoryBoost +
+    targetWordBoost +
     falseFriendBoost -
     levelPenalty
   );
@@ -75,15 +85,18 @@ function scoreNewCard(
   examType: "TCF" | "TEF",
   currentLevel: string,
   plan: DeckPlan,
-  focusTags: Set<string>
+  focusTags: Set<string>,
+  reviewWords: Set<string>
 ) {
   const examFrequency = getExamFrequency(card, examType);
   const level = normalizeStudyLevel(card.word.cefr_level);
   const levelDistance = getLevelDistance(level, currentLevel);
   const category = normalizeTag(card.word.category);
+  const isTargetReviewWord = reviewWords.has(card.word.french?.toLowerCase?.() || "");
   const categoryBoost = focusTags.has(category) ? 14 : 0;
   const falseFriendBoost = card.word.false_friend_warning ? 10 : 0;
   const sentenceBoost = card.word.example_sentence ? 4 : 0;
+  const targetWordBoost = isTargetReviewWord ? 16 : 0;
 
   let difficultyScore = 0;
   if (plan.difficultyBias === "hard") {
@@ -115,6 +128,7 @@ function scoreNewCard(
     difficultyScore +
     levelFitBoost +
     categoryBoost +
+    targetWordBoost +
     falseFriendBoost +
     sentenceBoost +
     examFrequency * 2 -
@@ -194,12 +208,19 @@ export function buildPersonalizedStudyQueue(params: {
   examType: "TCF" | "TEF";
   currentLevel: string;
   plan: DeckPlan;
+  reviewFocus?: ReviewFocus;
 }) {
-  const focusTags = new Set((params.plan.focusTags || []).map(normalizeTag));
+  const focusTags = new Set([
+    ...(params.plan.focusTags || []).map(normalizeTag),
+    ...((params.reviewFocus?.weaknessLabels || []).map(normalizeTag)),
+  ]);
+  const reviewWords = new Set(
+    (params.reviewFocus?.vocabToReview || []).map((word) => word.trim().toLowerCase())
+  );
   const dueCards = [...params.dueCards].sort(
     (left, right) =>
-      scoreDueCard(right, params.examType, params.currentLevel, focusTags) -
-      scoreDueCard(left, params.examType, params.currentLevel, focusTags)
+      scoreDueCard(right, params.examType, params.currentLevel, focusTags, reviewWords) -
+      scoreDueCard(left, params.examType, params.currentLevel, focusTags, reviewWords)
   );
 
   if (dueCards.length >= params.maxCards) {
@@ -209,8 +230,8 @@ export function buildPersonalizedStudyQueue(params: {
   const remainingSlots = params.maxCards - dueCards.length;
   const rankedNewCards = [...params.newCards].sort(
     (left, right) =>
-      scoreNewCard(right, params.examType, params.currentLevel, params.plan, focusTags) -
-      scoreNewCard(left, params.examType, params.currentLevel, params.plan, focusTags)
+      scoreNewCard(right, params.examType, params.currentLevel, params.plan, focusTags, reviewWords) -
+      scoreNewCard(left, params.examType, params.currentLevel, params.plan, focusTags, reviewWords)
   );
 
   const selectedNewCards = selectNewCardsWithSupportCap(

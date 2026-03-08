@@ -688,3 +688,57 @@ Respond ONLY with this JSON:
   "exam_readiness_gaps": ["specific gaps between current ability and exam requirements"]
 }`;
 }
+
+export function contextDrillPrompt(params: {
+  examType: "TCF" | "TEF";
+  level: string;
+  word: {
+    french: string;
+    english: string;
+    category: string;
+    cefr_level: string;
+    example_sentence?: string | null;
+    false_friend_warning?: string | null;
+  };
+  distractors: string[];
+  writingWeaknesses: string[];
+}) {
+  return `Create one short context drill for this French vocabulary word.
+
+Student:
+- Target exam: ${params.examType} Canada
+- Current level: ${params.level}
+- Recent writing weaknesses: ${params.writingWeaknesses.join(", ") || "none identified"}
+
+Word to reinforce:
+- French: ${params.word.french}
+- English: ${params.word.english}
+- Category: ${params.word.category}
+- Word CEFR level: ${params.word.cefr_level}
+- Example sentence: ${params.word.example_sentence || "none"}
+- False-friend warning: ${params.word.false_friend_warning || "none"}
+
+Use these answer options exactly once each:
+${JSON.stringify([params.word.french, ...params.distractors])}
+
+Rules:
+- The drill must feel useful for exam prep, not like a random textbook sentence.
+- Prefer a sentence where the student must understand the word's meaning or register in context.
+- Keep the French sentence concise.
+- Include a brief explanation of why the correct word fits.
+- Include a short "exam_value" line explaining why this word matters in TCF or TEF performance.
+- Include a short "coaching_tip" line that helps the student use this word better in writing or comprehension.
+
+Respond ONLY with this JSON:
+{
+  "exercise_type": "cloze",
+  "question": "Short instruction line",
+  "sentence_with_blank": "French sentence with _____",
+  "sentence_en": "English translation",
+  "options": ["correct_word", "distractor1", "distractor2", "distractor3"],
+  "correct_index": 0,
+  "explanation": "Why the correct word fits",
+  "exam_value": "Why this word matters for the exam",
+  "coaching_tip": "How to remember or use it better"
+}`;
+}

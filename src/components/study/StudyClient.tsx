@@ -26,6 +26,18 @@ interface SelectionInsight {
   targetExam?: string;
 }
 
+interface ContextDrill {
+  exercise_type: "cloze";
+  question: string;
+  sentence_with_blank: string;
+  sentence_en: string;
+  options: string[];
+  correct_index: number;
+  explanation: string;
+  exam_value: string;
+  coaching_tip: string;
+}
+
 interface CardWithWord {
   id: string;
   word_id: string;
@@ -94,6 +106,9 @@ export default function StudyClient({
   const [showLang, setShowLang] = useState<TranslationLang>(preferredLang);
   const [mnemonic, setMnemonic] = useState<MnemonicData | null>(null);
   const [selectionInsight, setSelectionInsight] = useState<SelectionInsight | null>(null);
+  const [contextDrill, setContextDrill] = useState<ContextDrill | null>(null);
+  const [contextDrillLoading, setContextDrillLoading] = useState(false);
+  const [contextDrillAnswer, setContextDrillAnswer] = useState<number | null>(null);
   const router = useRouter();
   const supabase = getBrowserSupabaseClient();
   const { speak } = usePronounce();
@@ -154,6 +169,38 @@ export default function StudyClient({
     }
   }, [cards, currentIndex]);
 
+  const fetchContextDrill = useCallback(async () => {
+    if (!cards[currentIndex] || contextDrillLoading) return;
+
+    const currentCard = cards[currentIndex];
+    setContextDrillLoading(true);
+
+    try {
+      const res = await fetch("/api/ai/context-drill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wordId: currentCard.word_id,
+          french: currentCard.word.french,
+          english: currentCard.word.english,
+          category: currentCard.word.category,
+          level: currentCard.word.cefr_level,
+          exampleSentence: currentCard.word.example_sentence,
+          falseFriendWarning: currentCard.word.false_friend_warning,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.drill) {
+        setContextDrill(data.drill);
+      }
+    } catch {
+      // ignore drill failures; the flashcard still works
+    } finally {
+      setContextDrillLoading(false);
+    }
+  }, [cards, contextDrillLoading, currentIndex]);
+
   useEffect(() => {
     const createSession = async () => {
       const { data } = await supabase
@@ -169,6 +216,11 @@ export default function StudyClient({
   }, [supabase, userId]);
 
   const card = cards[currentIndex];
+  const isLeech =
+    !!card &&
+    card.times_wrong >= 4 &&
+    card.times_wrong >= Math.max(2, card.times_correct);
+
   const progress = cards.length > 0 ? (currentIndex / cards.length) * 100 : 0;
 
   const getTranslation = useCallback(
@@ -269,11 +321,21 @@ export default function StudyClient({
         setShowAnswer(false);
         setAnimating(false);
         setMnemonic(null);
+        setContextDrill(null);
+        setContextDrillAnswer(null);
+        setContextDrillLoading(false);
       }, 200);
     } else {
       finishSession();
     }
   };
+
+  useEffect(() => {
+    if (!showAnswer || !card || contextDrill || contextDrillLoading) return;
+    if (card.times_seen === 0 || isLeech) {
+      fetchContextDrill();
+    }
+  }, [card, contextDrill, contextDrillLoading, fetchContextDrill, isLeech, showAnswer]);
 
   const finishSession = async () => {
     if (sessionId) {
@@ -520,6 +582,17 @@ export default function StudyClient({
                 </div>
               )}
 
+              {isLeech && (
+                <div className="mt-3 bg-brand-error/10 border border-brand-error/20 rounded-xl px-4 py-3 text-left">
+                  <div className="text-[10px] uppercase tracking-wider text-brand-error font-bold mb-1">
+                    Sticky Word
+                  </div>
+                  <div className="text-xs text-brand-muted">
+                    You have missed this word {card.times_wrong} times. Do not just memorize the translation. Use the context drill or mnemonic before rating it again.
+                  </div>
+                </div>
+              )}
+
               {mnemonic?.mnemonic ? (
                 <div className="mt-3 bg-purple-500/10 border border-purple-500/20 rounded-xl px-4 py-3 text-left">
                   <div className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">
@@ -548,6 +621,68 @@ export default function StudyClient({
                   Generate Memory Trick
                 </button>
               )}
+
+              <div className="mt-3">
+                {contextDrill ? (
+                  <div className="bg-brand-surface border border-brand-border rounded-xl px-4 py-4 text-left">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-brand-accent mb-2">
+                      Context Drill
+                    </div>
+                    <div className="text-sm font-semibold text-brand-text mb-1">
+                      {contextDrill.question}
+                    </div>
+                    <div className="text-sm text-brand-muted mb-1">
+                      {contextDrill.sentence_with_blank}
+                    </div>
+                    <div className="text-[11px] text-brand-dim italic mb-3">
+                      {contextDrill.sentence_en}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {contextDrill.options.map((option, index) => {
+                        const answered = contextDrillAnswer !== null;
+                        const isCorrect = index === contextDrill.correct_index;
+                        const isPicked = index === contextDrillAnswer;
+
+                        let classes = "border-brand-border bg-brand-bg/40 text-brand-text";
+                        if (answered && isCorrect) classes = "border-brand-success bg-brand-success/10 text-brand-success";
+                        else if (answered && isPicked && !isCorrect) classes = "border-brand-error bg-brand-error/10 text-brand-error";
+
+                        return (
+                          <button
+                            key={option}
+                            onClick={() => contextDrillAnswer === null && setContextDrillAnswer(index)}
+                            disabled={contextDrillAnswer !== null}
+                            className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${classes}`}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {contextDrillAnswer !== null && (
+                      <div className="mt-3 text-xs text-brand-muted space-y-2">
+                        <div>{contextDrill.explanation}</div>
+                        <div className="text-brand-accent">{contextDrill.exam_value}</div>
+                        <div>{contextDrill.coaching_tip}</div>
+                      </div>
+                    )}
+                  </div>
+                ) : contextDrillLoading ? (
+                  <div className="text-xs text-brand-dim animate-pulse text-center">
+                    Building a quick context drill...
+                  </div>
+                ) : (
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      fetchContextDrill();
+                    }}
+                    className="mx-auto block text-xs px-4 py-2 rounded-lg bg-brand-accent/10 border border-brand-accent/20 text-brand-accent hover:bg-brand-accent/20 transition-colors"
+                  >
+                    Practice in Context
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
