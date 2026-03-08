@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { callClaude } from "@/lib/ai/claude";
 import { wordSelectionPrompt } from "@/lib/ai/prompts";
-import { compareStudyLevels, getAdjacentLevel, getLevelDistance, normalizeStudyLevel } from "@/lib/study/levels";
+import { STUDY_LEVELS, compareStudyLevels, getAdjacentLevel, getLevelDistance, normalizeStudyLevel } from "@/lib/study/levels";
 import { extractWritingFocusSignals } from "@/lib/study/review-focus";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -74,6 +74,21 @@ function determineCandidateLevels(
     candidateLevels: Array.from(new Set(candidateLevels)),
     challengeMode,
   };
+}
+
+function buildExpandedCandidateLevels(currentLevel: string, preferredLevels: string[]) {
+  const preferredSet = new Set(preferredLevels);
+  const current = normalizeStudyLevel(currentLevel);
+  const fallbackLevels = [...STUDY_LEVELS]
+    .filter((level) => !preferredSet.has(level) && getLevelDistance(level, current) <= 2)
+    .sort((left, right) => {
+      const leftDistance = getLevelDistance(left, current);
+      const rightDistance = getLevelDistance(right, current);
+      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+      return compareStudyLevels(left, right);
+    });
+
+  return [...preferredLevels, ...fallbackLevels];
 }
 
 function computeOverallAccuracy(cardStats: CardStatRow[]) {
@@ -243,9 +258,13 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { count, difficulty } = await req.json();
-  if (!count || count < 1 || count > 20) {
-    return NextResponse.json({ error: "count must be 1-20" }, { status: 400 });
+  const body = await req.json();
+  const count = Number(body.count ?? 0);
+  const difficulty = body.difficulty as Difficulty;
+  const preview = Boolean(body.preview);
+
+  if ((!preview && (!count || count < 1)) || count > 20) {
+    return NextResponse.json({ error: preview ? "count must be 0-20" : "count must be 1-20" }, { status: 400 });
   }
   if (!["easy", "medium", "hard"].includes(difficulty)) {
     return NextResponse.json({ error: "difficulty must be easy, medium, or hard" }, { status: 400 });
@@ -273,10 +292,14 @@ export async function POST(req: NextRequest) {
 
   const overallAccuracy = computeOverallAccuracy((cardStats || []) as CardStatRow[]);
   const weakCategories = getWeakCategories((cardStats || []) as CardStatRow[]);
-  const { candidateLevels, challengeMode } = determineCandidateLevels(
+  const { candidateLevels: preferredCandidateLevels, challengeMode } = determineCandidateLevels(
     profile.current_level || "A1",
-    difficulty as Difficulty,
+    difficulty,
     overallAccuracy
+  );
+  const candidateLevels = buildExpandedCandidateLevels(
+    profile.current_level || "A1",
+    preferredCandidateLevels
   );
 
   const existingWordIds = new Set((existingCards || []).map((card) => card.word_id));
@@ -289,9 +312,36 @@ export async function POST(req: NextRequest) {
   const availableWords = ((allCandidateWords || []) as WordCandidate[])
     .filter((word) => !existingWordIds.has(word.id))
     .sort((left, right) => compareStudyLevels(left.cefr_level, right.cefr_level));
+  const preferredCandidateLevelSet = new Set(preferredCandidateLevels);
+  const preferredAvailableCount = availableWords.filter((word) =>
+    preferredCandidateLevelSet.has(normalizeStudyLevel(word.cefr_level))
+  ).length;
+  const candidateWordLevels = Array.from(
+    new Set(availableWords.map((word) => word.cefr_level).filter(Boolean))
+  ).sort(compareStudyLevels);
+
+  if (preview) {
+    return NextResponse.json({
+      availableCount: availableWords.length,
+      preferredAvailableCount,
+      requestedCount: count,
+      levels: candidateWordLevels,
+      preferredLevels: preferredCandidateLevels,
+      strategy: challengeMode,
+      fallbackExpansion: availableWords.length > preferredAvailableCount,
+    });
+  }
 
   if (availableWords.length === 0) {
-    return NextResponse.json({ error: "No available words in the current study band", selected: [] }, { status: 200 });
+    return NextResponse.json(
+      {
+        error: "No fresh words fit this mode right now. Try review-only or switch difficulty.",
+        selected: [],
+        availableCount: 0,
+        preferredLevels: preferredCandidateLevels,
+      },
+      { status: 200 }
+    );
   }
 
   const actualCount = Math.min(count, availableWords.length);
@@ -325,7 +375,7 @@ export async function POST(req: NextRequest) {
       (left, right) =>
         scoreCandidateWord({
           word: right,
-          difficulty: difficulty as Difficulty,
+          difficulty,
           targetExam: (profile.target_exam || "TCF") as "TCF" | "TEF",
           currentLevel: profile.current_level || "A1",
           weakCategories,
@@ -334,7 +384,7 @@ export async function POST(req: NextRequest) {
         }) -
         scoreCandidateWord({
           word: left,
-          difficulty: difficulty as Difficulty,
+          difficulty,
           targetExam: (profile.target_exam || "TCF") as "TCF" | "TEF",
           currentLevel: profile.current_level || "A1",
           weakCategories,
@@ -353,7 +403,7 @@ export async function POST(req: NextRequest) {
     const prompt = wordSelectionPrompt({
       level: profile.current_level || "A1",
       count: actualCount,
-      difficulty: difficulty as Difficulty,
+      difficulty,
       targetExam: (profile.target_exam || "TCF") as "TCF" | "TEF",
       nativeLanguages: profile.native_languages || ["en"],
       overallAccuracy,
@@ -388,7 +438,7 @@ export async function POST(req: NextRequest) {
     selectedIds = fallbackWordSelection({
       availableWords: rankedCandidatePool,
       count: actualCount,
-      difficulty: difficulty as Difficulty,
+      difficulty,
       targetExam: (profile.target_exam || "TCF") as "TCF" | "TEF",
       currentLevel: profile.current_level || "A1",
       weakCategories,

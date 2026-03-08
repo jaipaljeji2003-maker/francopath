@@ -12,7 +12,9 @@ export default async function StudyPage({
   searchParams: Promise<{ ready?: string }>;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
@@ -24,10 +26,7 @@ export default async function StudyPage({
   if (!profile?.onboarding_complete) redirect("/placement");
 
   const dailyGoal = profile.daily_goal || 10;
-  const sessionLimit =
-    profile.session_limit === 999
-      ? 150
-      : profile.session_limit || dailyGoal;
+  const sessionLimit = profile.session_limit === 999 ? 150 : profile.session_limit || dailyGoal;
   const userLevel = profile.current_level || "A1";
   const params = await searchParams;
   const isReady = params.ready === "1";
@@ -42,8 +41,7 @@ export default async function StudyPage({
     const now = new Date().toISOString();
     const setupLevels = Array.from(
       new Set(
-        [deckPlanResult.plan.levelBand.primary, deckPlanResult.plan.levelBand.support]
-          .filter(Boolean)
+        [deckPlanResult.plan.levelBand.primary, deckPlanResult.plan.levelBand.support].filter(Boolean)
       )
     ) as string[];
 
@@ -139,7 +137,7 @@ export default async function StudyPage({
       userId={user.id}
       preferredLang={profile.preferred_translation || "en"}
       dailyGoal={dailyGoal}
-      deckPlanSummary={`Plan: ${levelBandSummary} · ${reviewCount} review + ${newCount} new · ${deckPlanResult.plan.rationale}${reviewFocus.vocabToReview.length ? ` · Writing focus: ${reviewFocus.vocabToReview.slice(0, 2).join(", ")}` : ""}`}
+      deckPlanSummary={`Plan: ${levelBandSummary} | ${reviewCount} review + ${newCount} new | ${deckPlanResult.plan.rationale}${reviewFocus.vocabToReview.length ? ` | Writing focus: ${reviewFocus.vocabToReview.slice(0, 2).join(", ")}` : ""}`}
     />
   );
 }
