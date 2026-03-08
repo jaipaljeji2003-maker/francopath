@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { snapNewWordCount, type DailyMission } from "@/lib/study/daily-mission";
 import type { TranslationLang } from "@/types";
 
 interface StudySetupProps {
@@ -13,6 +14,7 @@ interface StudySetupProps {
   defaultNewWords: number;
   dailyGoal: number;
   preferredLang: TranslationLang;
+  mission: DailyMission;
 }
 
 const WORD_COUNT_OPTIONS = [0, 3, 5, 8, 10, 15];
@@ -23,34 +25,29 @@ const DIFFICULTY_OPTIONS = [
     value: "easy" as const,
     label: "Stabilize",
     accent: "High frequency",
-    desc: "Useful, reusable words that smooth out recall and reduce overwhelm.",
+    desc: "Keep the load useful and reusable when review pressure is already high.",
   },
   {
     value: "medium" as const,
     label: "Exam Core",
     accent: "Best default",
-    desc: "Practical words with strong TCF and TEF payoff in comprehension and writing.",
+    desc: "Practical vocabulary with strong reading, listening, and writing payoff.",
   },
   {
     value: "hard" as const,
     label: "Stretch",
-    accent: "Higher leverage",
-    desc: "Sharper challenge words with real exam value, not filler easy picks.",
+    accent: "Sharper challenge",
+    desc: "Push into harder exam vocabulary without falling into filler easy words.",
   },
 ];
 
-function getSelectableWordCount(desiredCount: number, availableCount: number): number {
-  const cappedDesired = Math.max(0, Math.min(desiredCount, availableCount));
-  return [...WORD_COUNT_OPTIONS].reverse().find((option) => option <= cappedDesired) ?? 0;
-}
-
 function getRecommendation(dueCount: number, availableCount: number): string {
-  if (availableCount === 0) return "No suitable new words are ready right now. Reviews should take priority today.";
-  if (dueCount > 20) return "Heavy review load today. Keep new words low so retention stays strong.";
-  if (dueCount > 10) return "Moderate review load. A smaller set of new words will give better retention.";
-  if (dueCount > 5) return "Balanced day. This is a good time to add a focused batch of new vocabulary.";
-  if (dueCount > 0) return "Light review load. You can afford a stronger new-word session.";
-  return "No reviews are due, so this is a good day to add fresh vocabulary.";
+  if (availableCount === 0) return "New-word inventory is thin right now, so today should be about retention and review quality.";
+  if (dueCount > 20) return "Your queue is heavy. A small new-word batch is enough.";
+  if (dueCount > 10) return "You have meaningful review pressure, so stay selective with new additions.";
+  if (dueCount > 5) return "This is a good day for a balanced session.";
+  if (dueCount > 0) return "Review load is manageable, so you can safely add useful new words.";
+  return "No reviews are due, so this is the best time to expand your exam vocabulary.";
 }
 
 function getAvailabilityNote(params: {
@@ -61,12 +58,12 @@ function getAvailabilityNote(params: {
   fallbackExpansion: boolean;
 }): string {
   if (params.availableCount === 0) {
-    return `No strong ${params.difficultyLabel.toLowerCase()} words are available right now. Reviews will give you more value today.`;
+    return `No strong ${params.difficultyLabel.toLowerCase()} words are available right now. Review-only is the better session.`;
   }
 
   const levelText = params.levels.length ? ` across ${params.levels.join(", ")}` : "";
   if (params.fallbackExpansion && params.availableCount > params.preferredAvailableCount) {
-    return `${params.availableCount} words are available${levelText}. AI may widen slightly beyond the ideal band to keep the session valuable.`;
+    return `${params.availableCount} words are available${levelText}. AI may widen slightly beyond the ideal band so the session still feels valuable.`;
   }
 
   return `${params.availableCount} words are currently available${levelText} for this mode.`;
@@ -78,16 +75,19 @@ export default function StudySetup({
   targetExam,
   dueCardCount,
   availableNewWordCount,
-  defaultNewWords,
   dailyGoal,
+  mission,
 }: StudySetupProps) {
   const [newWordCount, setNewWordCount] = useState(() =>
-    getSelectableWordCount(defaultNewWords, availableNewWordCount)
+    snapNewWordCount(mission.recommendedNewWords, availableNewWordCount)
   );
-  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
+    mission.recommendedDifficulty
+  );
   const [liveAvailableCount, setLiveAvailableCount] = useState(availableNewWordCount);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityNote, setAvailabilityNote] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -131,14 +131,14 @@ export default function StudySetup({
             fallbackExpansion: Boolean(data.fallbackExpansion),
           })
         );
-        setNewWordCount((current) => getSelectableWordCount(current, nextAvailableCount));
+        setNewWordCount((current) => snapNewWordCount(current, nextAvailableCount));
       } catch {
         if (cancelled) return;
         setLiveAvailableCount(availableNewWordCount);
         setAvailabilityNote(
-          "Exact availability could not be refreshed, but the session builder will still try the best match."
+          "Exact availability could not be refreshed, but the session builder will still use the best nearby words it can justify."
         );
-        setNewWordCount((current) => getSelectableWordCount(current, availableNewWordCount));
+        setNewWordCount((current) => snapNewWordCount(current, availableNewWordCount));
       } finally {
         if (!cancelled) {
           setAvailabilityLoading(false);
@@ -154,8 +154,17 @@ export default function StudySetup({
   }, [difficulty, availableNewWordCount]);
 
   const recommendation = getRecommendation(dueCardCount, liveAvailableCount);
+  const recommendedNewWordCount = snapNewWordCount(mission.recommendedNewWords, liveAvailableCount);
   const totalSession = dueCardCount + newWordCount;
   const noWordsAvailable = liveAvailableCount === 0;
+  const usingRecommended =
+    newWordCount === recommendedNewWordCount && difficulty === mission.recommendedDifficulty;
+
+  const resetToRecommended = () => {
+    setError(null);
+    setDifficulty(mission.recommendedDifficulty);
+    setNewWordCount(recommendedNewWordCount);
+  };
 
   const handleStart = async () => {
     setLoading(true);
@@ -180,7 +189,7 @@ export default function StudySetup({
           const nextAvailableCount =
             typeof data.availableCount === "number" ? data.availableCount : liveAvailableCount;
           setLiveAvailableCount(nextAvailableCount);
-          setNewWordCount((current) => getSelectableWordCount(current, nextAvailableCount));
+          setNewWordCount((current) => snapNewWordCount(current, nextAvailableCount));
           setError(
             nextAvailableCount === 0 && dueCardCount > 0
               ? `${data.error} Your due reviews are still ready below.`
@@ -218,7 +227,7 @@ export default function StudySetup({
 
   return (
     <div className="min-h-screen bg-brand-bg">
-      <div className="max-w-xl mx-auto px-5 py-8">
+      <div className="max-w-2xl mx-auto px-5 py-8">
         <div className="flex items-center gap-3 mb-8 animate-fade-up">
           <button
             onClick={() => router.push("/dashboard")}
@@ -227,124 +236,170 @@ export default function StudySetup({
             {"<"}
           </button>
           <div>
-            <h1 className="text-2xl font-extrabold">Study Setup</h1>
-            <p className="text-brand-dim text-xs">
-              Build an exam-focused session for {targetExam} at {userLevel}.
+            <div className="text-[11px] uppercase tracking-[0.18em] text-brand-dim font-semibold mb-1">
+              Study Setup
+            </div>
+            <h1 className="text-2xl font-extrabold">Recommended daily loop</h1>
+            <p className="text-brand-dim text-sm">
+              One sharp {targetExam} session for {userLevel}, with review protected first.
             </p>
           </div>
         </div>
 
-        <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 mb-4 animate-fade-up">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-brand-dim uppercase tracking-widest font-semibold mb-1">Reviews Due</div>
-              <div className="text-3xl font-black text-brand-warning">{dueCardCount}</div>
+        <div className="bg-brand-surface border border-brand-border rounded-3xl p-6 mb-5 animate-fade-up">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="text-xs uppercase tracking-[0.18em] text-brand-dim font-semibold">
+              Recommended today
             </div>
-            <div className="text-right">
-              <div className="text-xs text-brand-dim uppercase tracking-widest font-semibold mb-1">Available New</div>
-              <div className="text-3xl font-black text-brand-accent">
-                {availabilityLoading ? "..." : liveAvailableCount}
+            <div className="px-3 py-1 rounded-full border border-brand-accent/20 bg-brand-accent/10 text-brand-accent text-xs font-semibold">
+              {usingRecommended ? "Using recommendation" : "Custom session"}
+            </div>
+          </div>
+
+          <h2 className="text-2xl font-black mb-2">{mission.title}</h2>
+          <p className="text-sm text-brand-muted leading-relaxed mb-5">{mission.summary}</p>
+
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-4">
+              <div className="text-2xl font-extrabold text-brand-warning">{dueCardCount}</div>
+              <div className="text-[11px] text-brand-dim mt-1">Review due</div>
+            </div>
+            <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-4">
+              <div className="text-2xl font-extrabold text-brand-accent">
+                {availabilityLoading ? "..." : recommendedNewWordCount}
               </div>
+              <div className="text-[11px] text-brand-dim mt-1">Recommended new</div>
             </div>
+            <div className="rounded-2xl border border-brand-border bg-brand-bg/60 p-4">
+              <div className="text-lg font-extrabold text-brand-text">{mission.levelBandLabel}</div>
+              <div className="text-[11px] text-brand-dim mt-1">Study band</div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-brand-accent/15 bg-brand-accent/5 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-brand-accent font-semibold mb-1">
+              Why this session
+            </div>
+            <div className="text-sm text-brand-muted leading-relaxed">{mission.reason}</div>
           </div>
         </div>
 
-        <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-2xl px-4 py-3 mb-6 animate-fade-up">
-          <div className="text-xs text-brand-muted leading-relaxed">
-            {recommendation} AI will choose words for exam value and learner fit instead of just pulling whatever easy seed words remain.
+        <div className="bg-brand-accent/5 border border-brand-accent/20 rounded-2xl px-4 py-3 mb-5 animate-fade-up">
+          <div className="text-sm text-brand-muted leading-relaxed">
+            {recommendation}
           </div>
         </div>
 
         {availabilityNote && (
-          <div className="bg-brand-surface border border-brand-border rounded-2xl px-4 py-3 mb-6 animate-fade-up">
-            <div className="text-xs text-brand-dim leading-relaxed">{availabilityNote}</div>
+          <div className="bg-brand-surface border border-brand-border rounded-2xl px-4 py-3 mb-5 animate-fade-up">
+            <div className="text-sm text-brand-dim leading-relaxed">{availabilityNote}</div>
           </div>
         )}
 
-        {!noWordsAvailable && (
-          <div className="mb-6 animate-fade-up">
-            <label className="text-sm font-semibold text-brand-muted mb-3 block">
-              How many new words should we add?
-            </label>
-            <div className="grid grid-cols-6 gap-2">
-              {WORD_COUNT_OPTIONS.map((count) => {
-                const disabled = count > liveAvailableCount && count !== 0;
-                return (
-                  <button
-                    key={count}
-                    onClick={() => {
-                      if (disabled) return;
-                      setError(null);
-                      setNewWordCount(count);
-                    }}
-                    disabled={disabled}
-                    className={`py-3 rounded-xl border text-center font-semibold transition-all ${
-                      newWordCount === count
-                        ? "border-brand-accent bg-brand-accent/10 text-brand-accent"
-                        : disabled
-                          ? "border-brand-border text-brand-border cursor-not-allowed"
-                          : "border-brand-border text-brand-dim hover:border-brand-accent/30"
-                    }`}
-                  >
-                    <div className="text-lg">{count}</div>
-                    {count === 0 && <div className="text-[8px] opacity-60">Skip</div>}
-                  </button>
-                );
-              })}
+        <div className="bg-brand-surface border border-brand-border rounded-3xl p-5 mb-5 animate-fade-up">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-brand-text">Tune this session</div>
+              <div className="text-xs text-brand-dim mt-1">
+                Keep the recommendation, or open the controls if you want to adjust count and difficulty.
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={resetToRecommended}
+                className="px-3 py-2 rounded-xl border border-brand-border text-sm font-semibold text-brand-dim hover:border-brand-accent/30 hover:text-brand-text transition-colors"
+              >
+                Use recommended
+              </button>
+              <button
+                onClick={() => setShowAdvanced((value) => !value)}
+                className="px-3 py-2 rounded-xl border border-brand-border text-sm font-semibold text-brand-text hover:border-brand-accent/30 transition-colors"
+              >
+                {showAdvanced ? "Hide controls" : "Adjust session"}
+              </button>
             </div>
           </div>
-        )}
 
-        {noWordsAvailable && (
-          <div className="bg-brand-surface border border-brand-border rounded-2xl p-5 mb-6 text-center animate-fade-up">
-            <p className="text-sm text-brand-muted">
-              No fresh words fit this mode right now.
-            </p>
-            <p className="text-xs text-brand-dim mt-1">
-              Focus on review today, or switch difficulty for a different kind of new vocabulary.
-            </p>
-          </div>
-        )}
-
-        {newWordCount > 0 && !noWordsAvailable && (
-          <div className="mb-6 animate-fade-up">
-            <label className="text-sm font-semibold text-brand-muted mb-3 block">
-              What kind of new words should AI target?
-            </label>
-            <div className="grid grid-cols-1 gap-3">
-              {DIFFICULTY_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    setError(null);
-                    setDifficulty(option.value);
-                  }}
-                  className={`p-4 rounded-2xl border text-left transition-all ${
-                    difficulty === option.value
-                      ? "border-brand-accent bg-brand-accent/10 shadow-lg shadow-brand-accent/5"
-                      : "border-brand-border hover:border-brand-accent/30"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className={`text-sm font-bold ${difficulty === option.value ? "text-brand-accent" : "text-brand-text"}`}>
-                        {option.label}
-                      </div>
-                      <div className="text-[10px] text-brand-dim uppercase tracking-wider mt-1">
-                        {option.accent}
-                      </div>
-                    </div>
-                    <div className="text-[10px] text-brand-dim max-w-[220px] text-right">
-                      {option.desc}
-                    </div>
+          {showAdvanced && (
+            <div className="mt-5 pt-5 border-t border-brand-border">
+              {!noWordsAvailable && (
+                <div className="mb-6">
+                  <label className="text-sm font-semibold text-brand-muted mb-3 block">
+                    New words
+                  </label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {WORD_COUNT_OPTIONS.map((count) => {
+                      const disabled = count > liveAvailableCount && count !== 0;
+                      return (
+                        <button
+                          key={count}
+                          onClick={() => {
+                            if (disabled) return;
+                            setError(null);
+                            setNewWordCount(count);
+                          }}
+                          disabled={disabled}
+                          className={`py-3 rounded-xl border text-center font-semibold transition-all ${
+                            newWordCount === count
+                              ? "border-brand-accent bg-brand-accent/10 text-brand-accent"
+                              : disabled
+                                ? "border-brand-border text-brand-border cursor-not-allowed"
+                                : "border-brand-border text-brand-dim hover:border-brand-accent/30"
+                          }`}
+                        >
+                          <div className="text-lg">{count}</div>
+                          {count === 0 && <div className="text-[9px] opacity-60">Skip</div>}
+                        </button>
+                      );
+                    })}
                   </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+                </div>
+              )}
 
-        <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 mb-6 animate-fade-up">
+              <div>
+                <label className="text-sm font-semibold text-brand-muted mb-3 block">
+                  Target mode
+                </label>
+                <div className="grid grid-cols-1 gap-3">
+                  {DIFFICULTY_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setError(null);
+                        setDifficulty(option.value);
+                      }}
+                      className={`p-4 rounded-2xl border text-left transition-all ${
+                        difficulty === option.value
+                          ? "border-brand-accent bg-brand-accent/10 shadow-lg shadow-brand-accent/5"
+                          : "border-brand-border hover:border-brand-accent/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div
+                            className={`text-sm font-bold ${
+                              difficulty === option.value ? "text-brand-accent" : "text-brand-text"
+                            }`}
+                          >
+                            {option.label}
+                          </div>
+                          <div className="text-[10px] text-brand-dim uppercase tracking-wider mt-1">
+                            {option.accent}
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-brand-dim max-w-[260px] text-right">
+                          {option.desc}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-brand-surface border border-brand-border rounded-2xl p-4 mb-5 animate-fade-up">
           <div className="flex items-center justify-between text-sm">
             <span className="text-brand-dim">Session preview</span>
             <span className="font-bold text-brand-text">
@@ -354,15 +409,20 @@ export default function StudySetup({
               {dueCardCount === 0 && newWordCount === 0 && <span className="text-brand-dim">No cards</span>}
             </span>
           </div>
+          <div className="text-xs text-brand-dim mt-2">
+            {usingRecommended
+              ? "You are using the recommended daily session."
+              : "You have tuned this session away from the default recommendation."}
+          </div>
           {totalSession > dailyGoal && (
-            <div className="text-[10px] text-brand-warning mt-1">
-              Your session may run past the daily goal of {dailyGoal}, but the queue will stay review-first.
+            <div className="text-[11px] text-brand-warning mt-2">
+              This session is larger than your daily goal of {dailyGoal}, so finishing it may take longer than usual.
             </div>
           )}
         </div>
 
         {error && (
-          <div className="bg-brand-error/10 border border-brand-error/20 rounded-xl px-4 py-2 mb-4 text-xs text-brand-error">
+          <div className="bg-brand-error/10 border border-brand-error/20 rounded-xl px-4 py-3 mb-4 text-sm text-brand-error">
             {error}
           </div>
         )}
@@ -375,12 +435,12 @@ export default function StudySetup({
           {loading ? (
             <span className="flex items-center justify-center gap-2">
               <span className="animate-spin">...</span>
-              Building a personalized {targetExam} session...
+              Building your {targetExam} session...
             </span>
           ) : newWordCount > 0 ? (
-            <>Start Session - {newWordCount} new + {dueCardCount} review</>
+            <>Start session - {newWordCount} new + {dueCardCount} review</>
           ) : dueCardCount > 0 ? (
-            <>Start Review Session - {dueCardCount} cards</>
+            <>Start review session - {dueCardCount} cards</>
           ) : (
             "No cards to study"
           )}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import StudyClient from "@/components/study/StudyClient";
 import StudySetup from "@/components/study/StudySetup";
 import { getDeckPlanForUser } from "@/lib/study/deck-plan";
+import { recommendDailyMission } from "@/lib/study/daily-mission";
 import { buildPersonalizedStudyQueue } from "@/lib/study/queue";
 import { extractWritingFocusSignals } from "@/lib/study/review-focus";
 
@@ -67,6 +68,12 @@ export default async function StudyPage({
     const totalWordsInBand = (setupWordInventory || []).length;
     const userCardsInBand = (setupUserCards || []).length;
     const availableNewWordCount = Math.max(0, totalWordsInBand - userCardsInBand);
+    const mission = recommendDailyMission({
+      dueCount: dueCardCount || 0,
+      availableNewWordCount,
+      dailyGoal,
+      plan: deckPlanResult.plan,
+    });
 
     return (
       <StudySetup
@@ -78,6 +85,7 @@ export default async function StudyPage({
         defaultNewWords={profile.daily_new_words ?? 5}
         dailyGoal={dailyGoal}
         preferredLang={profile.preferred_translation || "en"}
+        mission={mission}
       />
     );
   }
